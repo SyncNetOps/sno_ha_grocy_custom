@@ -2,7 +2,7 @@
 
 Willkommen zur ultimativen [Grocy](https://grocy.info/) ERP-Integration für Home Assistant\!
 
-Im Gegensatz zu vielen älteren Integrationen wurde **SNO-HA\_Grocy-custom** von Grund auf neu entwickelt. Sie nutzt modernste Home Assistant Konzepte (DataUpdateCoordinator, native Entity-Selektoren, To-Do Listen Two-Way-Sync) und schont dabei die Ressourcen deines Servers.
+Diese Integration  **SNO-HA\_Grocy-custom** wurde von Grund auf neu entwickelt. Sie nutzt modernste Home Assistant Konzepte (DataUpdateCoordinator, native Entity-Selektoren, To-Do Listen Two-Way-Sync) und schont dabei die Ressourcen deines Servers.
 
 ## **🔥 Features & Highlights**
 
