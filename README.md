@@ -1,8 +1,8 @@
-# **🛒 SNO-HA\_Grocy-custom (V1.0.0)**
+# **🛒 SNO-HA_Grocy-custom (V1.0.0)**
 
 Willkommen zur ultimativen [Grocy](https://grocy.info/) ERP-Integration für Home Assistant\!
 
-Diese Integration  **SNO-HA\_Grocy-custom** wurde von Grund auf neu entwickelt. Sie nutzt modernste Home Assistant Konzepte (DataUpdateCoordinator, native Entity-Selektoren, To-Do Listen Two-Way-Sync) und schont dabei die Ressourcen deines Servers.
+Diese Integration  **SNO-HA_Grocy-custom** wurde von Grund auf neu entwickelt. Sie nutzt modernste Home Assistant Konzepte (DataUpdateCoordinator, native Entity-Selektoren, To-Do Listen Two-Way-Sync) und schont dabei die Ressourcen deines Servers.
 
 ## **🔥 Features & Highlights**
 
@@ -29,7 +29,7 @@ Nutze die offiziellen Home Assistant To-Do Listen, um Grocy direkt im HA-Fronten
 
 ### **🎯 Keine IDs mehr abtippen (Entity Selectors)**
 
-Das Erstellen von Automatisierungen war noch nie so einfach. Alle Services unterstützen **native Home Assistant Dropdowns**. Du suchst in der Benutzeroberfläche einfach nach "Milch", wählst den Sensor aus, und die Integration extrahiert im Hintergrund vollautomatisch die korrekte product\_id.
+Das Erstellen von Automatisierungen war noch nie so einfach. Alle Services unterstützen **native Home Assistant Dropdowns**. Du suchst in der Benutzeroberfläche einfach nach "Milch", wählst den Sensor aus, und die Integration extrahiert im Hintergrund vollautomatisch die korrekte product_id.
 
 ## **🖼️ Inkludierte Dashboard-Karten (Glassmorphism UI)**
 
@@ -51,21 +51,21 @@ Da diese Integration brandneu ist, fügst du sie am besten als benutzerdefiniert
 
 1. Öffne **HACS** in Home Assistant.  
 2. Klicke oben rechts auf das Drei-Punkte-Menü \-\> **Benutzerdefinierte Repositories**.  
-3. Füge die URL dieses Repositories ein: https://github.com/SyncNetOps/sno\_ha\_grocy\_custom  
+3. Füge die URL dieses Repositories ein: https://github.com/SyncNetOps/sno_ha_grocy_custom  
 4. Kategorie: **Integration**.  
 5. Herunterladen und Home Assistant **komplett neu starten**.
 
 ### **Methode 2: Manuell**
 
 1. Lade dir dieses Repository als ZIP-Datei herunter.  
-2. Entpacke das Archiv und kopiere den Ordner custom\_components/sno\_ha\_grocy\_custom in das Verzeichnis /config/custom\_components/ deines Home Assistants.  
+2. Entpacke das Archiv und kopiere den Ordner custom_components/sno_ha_grocy_custom in das Verzeichnis /config/custom_components/ deines Home Assistants.  
 3. Home Assistant **neu starten** und Browser-Cache leeren (STRG+F5).
 
 ## **🚀 Einrichtung in Home Assistant**
 
 1. Generiere in Grocy einen API-Key *(Schraubenschlüssel oben rechts \-\> Manage API keys \-\> Hinzufügen)*.  
 2. Gehe in Home Assistant zu **Einstellungen \-\> Geräte & Dienste**.  
-3. Klicke auf **Integration hinzufügen** und suche nach SNO-HA\_Grocy-custom.  
+3. Klicke auf **Integration hinzufügen** und suche nach SNO-HA_Grocy-custom.  
 4. Gib deine exakte Grocy URL (inkl. http:// / https:// und Port) sowie den API-Key ein.
 
 ### **⚙️ Der Options-Flow (Dynamische Anpassung)**
@@ -89,11 +89,11 @@ Hier sind einige Beispiele, wie du die nativen Services in deinen YAML-Routinen 
 alias: "Milch verbraucht per NFC"  
 trigger:  
   \- platform: tag  
-    tag\_id: "deine-nfc-tag-id"  
+    tag_id: "deine-nfc-tag-id"  
 action:  
-  \- action: sno\_ha\_grocy\_custom.consume\_product  
+  \- action: sno_ha_grocy_custom.consume_product  
     data:  
-      entity\_id: sensor.sno\_ha\_grocy\_custom\_product\_5 \# Oder den Namen im UI-Dropdown wählen  
+      entity_id: sensor.sno_ha_grocy_custom_product_5 \# Oder den Namen im UI-Dropdown wählen  
       amount: 1
 
 ### **2\. Smart Home Cleaning: Hausarbeit automatisch erledigen**
@@ -103,13 +103,13 @@ action:
 alias: "Hausarbeit: Saugen erledigt"  
 trigger:  
   \- platform: state  
-    entity\_id: vacuum.roborock  
+    entity_id: vacuum.roborock  
     to: "docked"  
     from: "cleaning"  
 action:  
-  \- action: sno\_ha\_grocy\_custom.execute\_chore  
+  \- action: sno_ha_grocy_custom.execute_chore  
     data:  
-      entity\_id: sensor.sno\_ha\_grocy\_custom\_chore\_3
+      entity_id: sensor.sno_ha_grocy_custom_chore_3
 
 ### **3\. Rezept kochen (Dashboard Button)**
 
@@ -118,19 +118,19 @@ action:
 type: button  
 name: "Spaghetti Bolognese gekocht"  
 icon: mdi:chef-hat  
-tap\_action:  
+tap_action:  
   action: perform-action  
-  perform\_action: sno\_ha\_grocy\_custom.consume\_recipe  
+  perform_action: sno_ha_grocy_custom.consume_recipe  
   data:  
-    recipe\_id: 8
+    recipe_id: 8
 
 ### **Alle verfügbaren Services:**
 
-* sno\_ha\_grocy\_custom.consume\_product (Produkt verbrauchen)  
-* sno\_ha\_grocy\_custom.add\_product (Produkt kaufen/hinzufügen)  
-* sno\_ha\_grocy\_custom.transfer\_product (Produkt in ein anderes Lager umbuchen)  
-* sno\_ha\_grocy\_custom.execute\_chore (Hausarbeit abschließen)  
-* sno\_ha\_grocy\_custom.complete\_task (Aufgabe abschließen)  
-* sno\_ha\_grocy\_custom.charge\_battery (Batterie-Ladezyklus zurücksetzen)
+* sno_ha_grocy_custom.consume_product (Produkt verbrauchen)  
+* sno_ha_grocy_custom.add_product (Produkt kaufen/hinzufügen)  
+* sno_ha_grocy_custom.transfer_product (Produkt in ein anderes Lager umbuchen)  
+* sno_ha_grocy_custom.execute_chore (Hausarbeit abschließen)  
+* sno_ha_grocy_custom.complete_task (Aufgabe abschließen)  
+* sno_ha_grocy_custom.charge_battery (Batterie-Ladezyklus zurücksetzen)
 
 *Entwickelt mit ❤️ für das Home Assistant & Grocy Ökosystem.*
