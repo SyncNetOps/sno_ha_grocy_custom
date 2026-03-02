@@ -1,5 +1,5 @@
-{
-  "name": "SNO HA Grocy Custom",
+  "name": "SNO-HA_Grocy-custom",
   "render_readme": true,
-  "zip_release": false
+  "hacs": "1.19.0",
+  "iot_class": "cloud_polling"
 }
