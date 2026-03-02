@@ -3,5 +3,7 @@
   "domain": "sno_ha_grocy_custom",
   "render_readme": true,
   "zip_release": false,
-  "iot_class": "cloud_polling"
+  "iot_class": "cloud_polling",
+  "content_in_root": false,
+  "filename": "hacs.json"
 }
