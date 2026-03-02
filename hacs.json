@@ -1,7 +1,7 @@
 {
-  "name": "sno_ha_grocy_custom",
-  "render_readme": true,
+  "name": "SNO HA Grocy Custom",
   "domain": "sno_ha_grocy_custom",
-  "hacs": "1.19.0",
+  "render_readme": true,
+  "zip_release": false,
   "iot_class": "cloud_polling"
 }
