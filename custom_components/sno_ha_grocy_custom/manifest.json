@@ -8,5 +8,5 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/SyncNetOps/sno_ha_grocy_custom/issues",
   "requirements": [],
-  "version": "1.0.0"
+  "version": "1.0.2"
 }
