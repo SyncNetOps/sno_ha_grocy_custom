@@ -1,11 +1,11 @@
 {
   "domain": "sno_ha_grocy_custom",
-  "name": "SNO-HA_Grocy-custom",
+  "name": "SNO HA Grocy Custom",
   "codeowners": ["@SyncNetOps"],
-  "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/SyncNetOps/sno_ha_grocy_custom",
   "iot_class": "cloud_polling",
-  "requirements": ["aiohttp>=3.8.0"],
+  "issue_tracker": "https://github.com/SyncNetOps/sno_ha_grocy_custom/issues",
+  "requirements": [],
   "version": "1.0.0"
 }
