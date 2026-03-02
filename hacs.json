@@ -1,5 +1,5 @@
 {
-  "name": "SNO-HA_Grocy-custom",
+  "name": "sno_ha_grocy_custom",
   "render_readme": true,
   "domain": "sno_ha_grocy_custom",
   "hacs": "1.19.0",
