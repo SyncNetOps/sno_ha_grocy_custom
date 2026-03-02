@@ -1,0 +1,108 @@
+consume_product:
+  name: "Produkt verbrauchen"
+  description: "Bucht ein Produkt aus dem Grocy Lagerbestand aus."
+  fields:
+    entity_id:
+      name: "🔍 Produkt Sensor (Tippe den Namen...)"
+      description: "Wähle das Produkt aus."
+      selector:
+        entity:
+          integration: sno_ha_grocy_custom
+          domain: sensor
+    product_id:
+      name: "Oder: Produkt ID (Manuell)"
+      selector: { text: {} }
+    amount:
+      name: "Menge"
+      required: true
+      default: 1
+      selector: { number: { min: 0.1, max: 1000, step: 0.1 } }
+    qu_id:
+      name: "Verpackungsgröße ID (Optional)"
+      selector: { text: {} }
+
+add_product:
+  name: "Produkt kaufen/hinzufügen"
+  fields:
+    entity_id:
+      name: "🔍 Produkt Sensor (Tippe den Namen...)"
+      selector:
+        entity:
+          integration: sno_ha_grocy_custom
+          domain: sensor
+    product_id:
+      name: "Oder: Produkt ID (Manuell)"
+      selector: { text: {} }
+    amount:
+      name: "Menge"
+      required: true
+      default: 1
+      selector: { number: { min: 0.1, max: 1000, step: 0.1 } }
+    price:
+      name: "Preis in € (Optional)"
+      selector: { number: { min: 0.0, max: 10000, step: 0.01 } }
+    qu_id:
+      name: "Verpackungsgröße ID (Optional)"
+      selector: { text: {} }
+
+transfer_product:
+  name: "Produkt umbuchen"
+  fields:
+    entity_id:
+      name: "🔍 Produkt Sensor (Tippe den Namen...)"
+      selector:
+        entity:
+          integration: sno_ha_grocy_custom
+          domain: sensor
+    product_id:
+      name: "Oder: Produkt ID (Manuell)"
+      selector: { text: {} }
+    amount:
+      name: "Menge"
+      required: true
+      default: 1
+      selector: { number: { min: 0.1, max: 1000, step: 0.1 } }
+    location_id_to:
+      name: "In Ziel-Lager ID"
+      selector: { text: {} }
+
+execute_chore:
+  name: "Hausarbeit erledigen"
+  fields:
+    entity_id:
+      name: "🔍 Hausarbeit Sensor (Tippe: 'Hausarbeit' ...)"
+      description: "Tippe das Wort 'Hausarbeit' ein, um direkt alle Chores zu sehen!"
+      selector:
+        entity:
+          integration: sno_ha_grocy_custom
+          domain: sensor
+    chore_id:
+      name: "Oder: Hausarbeit ID (Manuell)"
+      selector: { text: {} }
+
+complete_task:
+  name: "Aufgabe abschließen"
+  fields:
+    entity_id:
+      name: "🔍 Aufgaben Sensor (Tippe: 'Aufgabe' ...)"
+      description: "Tippe das Wort 'Aufgabe' ein, um direkt alle Tasks zu sehen!"
+      selector:
+        entity:
+          integration: sno_ha_grocy_custom
+          domain: sensor
+    task_id:
+      name: "Oder: Aufgaben ID (Manuell)"
+      selector: { text: {} }
+
+charge_battery:
+  name: "Batterie laden/wechseln"
+  fields:
+    entity_id:
+      name: "🔍 Batterie Sensor (Tippe: 'Batterie' ...)"
+      selector:
+        entity:
+          integration: sno_ha_grocy_custom
+          domain: sensor
+    battery_id:
+      name: "Oder: Batterie ID (Manuell)"
+      selector: { text: {} }
