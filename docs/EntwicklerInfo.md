@@ -124,3 +124,111 @@ hass.services.async_register(DOMAIN, "add_recipe", handle_add_recipe)
  * Bilder laden im Dashboard nicht: Die GrocyPictureView in __init__.py könnte Probleme haben, wenn die URL-Struktur in der Grocy-Antwort von Grocy-Version zu Grocy-Version variiert. Prüfe, ob der Regex/Base64 Encoder saubere Dateinamen extrahiert.
 Dokumentation erstellt für v1.0.3 der sno_ha_grocy_custom Integration.
 
+
+
+
+# Entwicklerdokumentation: Frontend, Blueprints & Sensoren
+
+Diese Dokumentation beschreibt das exakte Zusammenspiel der UI-Elemente, Automatisierungen und der Sensoren der `sno_ha_grocy_custom` Integration. Sie richtet sich an Entwickler, die Dashboards, Automatisierungen oder die Datenaufbereitung erweitern möchten.
+
+---
+
+## 1. Das Architektur-Muster (Zusammenspiel & Abhängigkeiten)
+
+Die Integration nutzt ein strikt **unidirektionales Datenfluss-Muster (One-Way Data Binding)** für das Frontend, um die Performance in Home Assistant hoch zu halten und die Grocy API zu schonen.
+
+**Der Lese-Zyklus (Daten-Anzeige):**
+1. **Backend:** Der `DataUpdateCoordinator` holt alle Grocy-Daten als großes JSON-Objekt.
+2. **Sensoren:** Die Klassen in `sensor.py` greifen sich ihre spezifischen Listen (z.B. `meal_plan`) aus dem Coordinator. Der native Zustand (`native_value`) des Sensors ist meist nur ein Zähler (z.B. "3"), aber die **kompletten Rohdaten** werden in die `extra_state_attributes` geschrieben.
+3. **Frontend (Karten):** Die Custom JS-Cards aus `autoinstall.py` fragen **niemals** selbst die Grocy-API ab. Sie lauschen via Home Assistant Websocket auf Statusänderungen der Sensoren und rendern ihre HTML-Oberfläche ausschließlich anhand der JSON-Objekte aus den `extra_state_attributes`.
+
+**Der Schreib-Zyklus (Benutzer-Interaktion):**
+1. Ein User klickt in einer Karte auf einen Button oder nutzt einen Blueprint (NFC).
+2. Es wird ein nativer HA-Service aufgerufen (z.B. `sno_ha_grocy_custom.consume_product`).
+3. Der Service (`__init__.py`) sendet den API-Call an Grocy.
+4. Nach Erfolg löst der Service **sofort** ein `coordinator.async_request_refresh()` aus. 
+5. Die Sensoren aktualisieren ihre Attribute -> Die Karten rendern sich in Echtzeit neu.
+
+---
+
+## 2. Sensoren und ihre Attribute (`sensor.py`)
+
+Die Sensoren sind das Herzstück der Datenbereitstellung. Jeder Entwickler muss wissen, welche Daten in den Attributen (Payload) versteckt sind.
+
+### 2.1 Der "Baukasten-Motor": `GrocyMasterInventorySensor`
+* **Zustand (`native_value`):** Letzter Aktualisierungszeitpunkt oder Gesamt-Bestands-Count.
+* **Attribute:** Beinhaltet das komplette, unmodifizierte Array des Lagerbestands (Stock) inklusive verschachtelter Produkt-Details, Standort-IDs und Barcodes.
+* **Abhängigkeit:** Dies ist der primäre Datenlieferant für die *Inventory Explorer-Karte*.
+
+### 2.2 Bestands-Sensoren (Stock)
+Alle folgenden Sensoren filtern den Master-Stock basierend auf Grocy-Logik. Sie liefern als State eine Zahl und als Attribut die gefilterte Liste (`items`).
+* **`GrocyStockTotalSensor`:** Alle Produkte im Bestand.
+* **`GrocyStockMissingSensor`:** Produkte, die unterhalb des in Grocy definierten Mindestbestands (min_stock_amount) liegen.
+* **`GrocyStockExpiringSensor`:** Produkte, deren Ablaufdatum in den nächsten X Tagen (meist 5) erreicht wird.
+* **`GrocyStockExpiredSensor`:** Produkte, deren Haltbarkeitsdatum in der Vergangenheit liegt.
+* **`GrocyStockValueSensor`:** (Gesteuert durch Options-Flow `CONF_ADVANCED_STATS`) Berechnet den monetären Gesamtwert des Lagers anhand von Menge x Preis.
+
+### 2.3 Mahlzeiten & Rezepte
+* **`GrocyRecipesTotalSensor`:** * **State:** Anzahl aller angelegten Rezepte.
+* **`GrocyMealPlanTodaySensor`:** * **State:** Anzahl der für den heutigen Tag (`dt_util.now().date()`) geplanten Mahlzeiten.
+  * **Attribute:** Enthält ein Array `plans` mit den kompletten Rezept-Details für den heutigen Tag.
+  * **Abhängigkeit:** Datenlieferant für die *Grocy Meal Plan Card*.
+
+### 2.4 Batterien & Equipment
+* **`GrocyEquipmentSensor`:** Liefert Geräte-Handbücher und Garantie-Daten (Attribut `items`).
+* **`GrocyBatteriesTotalSensor`:** Gesamtzahl der in Grocy verwalteten Batterien.
+* **`GrocyBatteriesDueSensor`:**
+  * **State:** Anzahl der entladenen / fälligen Batterien.
+  * **Attribute:** Beinhaltet `battery_id` der fälligen Batterien, um per Service direkt das Aufladen tracken zu können.
+
+---
+
+## 3. Die Custom Dashboard-Karten (`autoinstall.py`)
+
+Die JS-Dateien dieser Karten werden von der Integration automatisch in `/config/www/sno_ha_grocy_custom/` erzeugt und im HA-Frontend registriert.
+
+* **`grocy-inventory-explorer-card`** (Virtuelle Speisekammer / Inventory Explorer)
+  * **Funktion:** Visualisiert den Lagerbestand interaktiv (Suchen, Filtern, Sortieren).
+  * **Zusammenspiel:** Nutzt den `GrocyMasterInventorySensor`. Verwendet die Grocy-Picture Proxy-View (`/api/sno_grocy/picture/`), um Bilder datenschutzkonform im Dashboard anzuzeigen.
+* **`grocy-household-hub-card`** (Hausarbeiten & Aufgaben)
+  * **Funktion:** Zeigt fällige Chores und Tasks in einem modernen UI an und bietet Buttons zum "Erledigen".
+  * **Zusammenspiel:** Feuert bei Knopfdruck die Services `execute_chore` und `complete_task`.
+* **`grocy-meal-plan-card`** (Heutiger Essensplan)
+  * **Funktion:** Zeigt Bild, Name und (falls vorhanden) Zutaten für das heutige Rezept an.
+  * **Zusammenspiel:** Parst die `plans` Attribute des `GrocyMealPlanTodaySensor`. Bei Klick auf "Verbrauchen" wird der Service `consume_recipe` abgefeuert.
+* **`grocy-shopping-card`** (Einkaufsliste sortiert)
+  * **Funktion:** Native Ansicht des Einkaufszettels.
+  * **Zusammenspiel:** Zieht Daten aus der Shopping-List Instanz. Bietet "In den Einkaufswagen" (Hinzufügen) Logik, die in Grocy als Kauf (`transaction_type: purchase`) verarbeitet wird (`add_product` Service).
+
+---
+
+## 4. Blueprints / Automatisierungen (`autoinstall.py`)
+
+Blueprints sind standardisierte Automatisierungsvorlagen für den Endnutzer. Sie werden automatisch im Ordner `/config/blueprints/automation/sno_ha_grocy_custom/` erstellt.
+
+### 4.1 Grocy NFC-Verbrauch (`nfc_consume.yaml` / `BP_NFC`)
+* **Zweck:** Barrierefreier Vorratsabbau in der Küche per Smartphone und NFC-Sticker.
+* **Funktionsweise (Ablauf):**
+  1. **Trigger:** Lauscht auf das Home Assistant Event `tag_scanned`.
+  2. **Bedingung (Input):** Die `tag_id` muss mit dem vom User im Blueprint gewählten NFC-Tag übereinstimmen.
+  3. **Aktion:** Ruft den Service `sno_ha_grocy_custom.consume_product` auf.
+  4. **Datenübergabe:** Übergibt die in den Blueprint-Inputs definierte `entity_id` (den Produkt-Sensor) und die fest definierte `amount` (Menge, Standard 1.0).
+* **Entwickler-Fokus:** Wenn sich in `services.yaml` die Parameter für `consume_product` ändern, **muss** dieser Blueprint zwingend angepasst werden.
+
+### 4.2 Grocy Hausarbeit-Erinnerung (`chore_reminder.yaml` / `BP_CHORE`)
+* **Zweck:** Proaktives Task-Management per Smartphone-Pushnachricht (Actionable Notification).
+* **Funktionsweise (Ablauf):**
+  1. **Trigger:** Zeitgesteuert (z.B. täglich um 18:00 Uhr).
+  2. **Bedingung:** Prüft, ob der im Blueprint hinterlegte Sensor für überfällige Hausarbeiten (z.B. `GrocyChoresOverdueSensor`) einen Wert `> 0` hat.
+  3. **Aktion 1 (Benachrichtigung):** Sendet eine Benachrichtigung an das Mobile Device (`notify.mobile_app_...`).
+  4. **Aktion 2 (Interaktion):** Die Nachricht enthält spezifische `actions` (Buttons) im Payload – z.B. "action: ERLEDIGT".
+  5. **Aktion 3 (Event-Handling):** Der Blueprint lauscht auf das Event `mobile_app_notification_action`. Wird "ERLEDIGT" geklickt, ruft der Blueprint `sno_ha_grocy_custom.execute_chore` auf.
+* **Entwickler-Fokus:** Dieser Blueprint ist ein Paradebeispiel für den UX-Mehrwert. Bei Erweiterungen (z.B. "Aufgabe verschieben") müssen neue Services in `__init__.py` geschrieben und hier als weitere `actions` in den Push-Payload eingebettet werden.
+
+---
+
+### Checkliste für Code-Änderungen an diesen Komponenten:
+- [ ] Wird eine neue Eigenschaft eines Produkts im Dashboard gebraucht? -> In `sensor.py` (Master Sensor) sicherstellen, dass die Eigenschaft aus dem API-JSON nicht verworfen wird.
+- [ ] Wird ein neuer Service in `__init__.py` registriert? -> Muss zwingend in `services.yaml` dokumentiert werden, sonst können Custom Cards und Blueprints ihn nicht via HA aufrufen.
+- [ ] Wurde das Design einer Karte geändert? -> Den JS-Code als Einzeiler (minified/escaped) im Python-String in `autoinstall.py` aktualisieren!
+- [ ] 
