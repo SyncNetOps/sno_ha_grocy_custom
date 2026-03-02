@@ -1,4 +1,4 @@
-# **🛒 SNO-HA_Grocy-custom (V1.0.0)**
+# **🛒 SNO-HA_Grocy-custom (V1.0.x)**
 
 Willkommen zur ultimativen [Grocy](https://grocy.info/) ERP-Integration für Home Assistant\!
 
