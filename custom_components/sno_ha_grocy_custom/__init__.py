@@ -1,4 +1,4 @@
-"""Initialisierung der SNO-HA_Grocy-custom Integration V1.4.1 (Stability Fixes)."""
+"""Initialisierung der SNO-HA_Grocy-custom Integration V1.4.2 (Bulk-Collision Fix)."""
 from datetime import timedelta, datetime
 import voluptuous as vol
 import base64
@@ -147,7 +147,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if bat_id: await call_and_refresh(client.async_charge_battery(bat_id))
     hass.services.async_register(DOMAIN, "charge_battery", handle_battery)
 
-    # --- KI REZEPT IMPORT SERVICE (V1.4.1) ---
+    # --- KI REZEPT IMPORT SERVICE (V1.4.2) ---
     if enable_ai:
         async def handle_ai_import(call):
             text_input = call.data.get("text_input")
@@ -157,7 +157,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             products = await client.async_get_products()
             units = await client.async_get_quantity_units()
             
-            # --- START: Aggregierter Vorrats-Check Vorbereitung ---
+            # --- Aggregierter Vorrats-Check Vorbereitung ---
             stock_list = await client.async_get_stock()
             virtual_stock = {}
             if isinstance(stock_list, list):
@@ -168,7 +168,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         except (ValueError, TypeError):
                             v_amt = 0.0
                         virtual_stock[str(item.get("product_id"))] = v_amt
-            # --- ENDE ---
 
             recipes = await async_parse_recipe_with_ai(gemini_api_key, text_input, products, units, session)
             if not isinstance(recipes, list):
@@ -177,6 +176,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             
             locs = await client._async_get("/api/objects/locations")
             default_location_id = int(locs[0].get("id", 1)) if locs else 1
+
+            # --- NEU V1.4.2: Kurzzeit-Gedächtnis für Bulk-Erstellungen ---
+            # Verhindert "UNIQUE constraint failed" bei gleichen neuen Zutaten in mehreren Rezepten
+            session_created_products = {}
 
             for recipe in recipes:
                 if not isinstance(recipe, dict): continue
@@ -217,7 +220,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 
                 LOGGER.info(f"Rezept '{recipe_name}' angelegt. Verknüpfe Zutaten...")
                 
-                # --- START: Essensplan (Meal Plan) Eintragung ---
+                # Essensplan Eintragung
                 meal_plan_day = recipe.get("meal_plan_day")
                 if meal_plan_day:
                     try:
@@ -226,7 +229,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         if mp_success: LOGGER.info(f"-> {recipe_name} in den Essensplan am {meal_plan_day} eingetragen!")
                     except ValueError:
                         pass
-                # --- ENDE ---
                 
                 for ing in valid_ingredients:
                     try:
@@ -246,16 +248,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         except (ValueError, TypeError):
                             qu_id = default_qu_id
                         
-                        if str(prod_id) == "-1" and auto_create:
-                            new_id = await client.async_create_product(raw_name, default_location_id, qu_id, product_group_id)
-                            if new_id:
-                                prod_id = new_id
-                                virtual_stock[str(prod_id)] = 0.0
+                        # --- START V1.4.2 COLLISION FIX ---
+                        if str(prod_id) == "-1":
+                            raw_name_lower = raw_name.lower().strip()
+                            
+                            # 1. Haben wir es gerade in dieser Session schon erfunden?
+                            if raw_name_lower in session_created_products:
+                                prod_id = session_created_products[raw_name_lower]
+                            else:
+                                # 2. Doppelsicherung: Hat die KI es übersehen, aber es ist exakt so schon in Grocy?
+                                existing_prod = next((p for p in products if p.get("name", "").lower().strip() == raw_name_lower), None)
+                                if existing_prod:
+                                    prod_id = existing_prod.get("id")
+                                elif auto_create:
+                                    # 3. Okay, wirklich neu. Anlegen!
+                                    new_id = await client.async_create_product(raw_name, default_location_id, qu_id, product_group_id)
+                                    if new_id:
+                                        prod_id = new_id
+                                        session_created_products[raw_name_lower] = new_id
+                                        virtual_stock[str(prod_id)] = 0.0
+                        # --- ENDE COLLISION FIX ---
 
                         if prod_id and str(prod_id) != "-1":
                             success = await client.async_add_recipe_ingredient(recipe_id, prod_id, amount, qu_id)
                             
-                            # --- START: Aggregierter Vorrats-Check ---
                             if success and sync_shopping:
                                 available = virtual_stock.get(str(prod_id), 0.0)
                                 if available < amount:
@@ -264,7 +280,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                     virtual_stock[str(prod_id)] = 0.0
                                 else:
                                     virtual_stock[str(prod_id)] -= amount
-                            # --- ENDE ---
                         else:
                             if sync_shopping:
                                 await client.async_add_shopping_list_item(f"[REZEPT: {recipe_name}] Fehlende Zutat: {amount}x {raw_name}")
