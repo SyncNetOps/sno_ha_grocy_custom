@@ -1,4 +1,4 @@
-"""Config Flow & Options Flow für Grocy (V2.0 Multi-Step Fix)."""
+"""Config Flow & Options Flow für Grocy (V2.0 Multi-Step Safe Mode)."""
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
@@ -36,7 +36,8 @@ def get_select_schema():
     )
 
 class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 2
+    # BUMP AUF V1 ZURÜCKGESETZT: Umgeht den HA Error 500 komplett!
+    VERSION = 1
 
     def __init__(self):
         self._setup_data = {}
@@ -65,7 +66,6 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_MODE_SHOPPING, default=MODE_BOTH): get_select_schema(),
             vol.Required(CONF_ADVANCED_STATS, default=False): bool
         })
-        # last_step=False zwingt den "Weiter" Button zu erscheinen!
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors, last_step=False)
 
     async def async_step_ai_setup(self, user_input=None):
@@ -74,7 +74,6 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._setup_data.update(user_input)
             return await self.async_step_cookidoo_setup()
 
-        # Versuche dynamisch Gruppen und Einheiten von Grocy zu laden
         if self._client:
             try:
                 grps = await self._client.async_get_product_groups()
@@ -86,7 +85,6 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except Exception as e:
                 LOGGER.error(f"Fehler beim Laden von Grocy Dropdowns: {e}")
 
-        # Normale bool-Typen für sauberes Mapping in der de.json
         schema = vol.Schema({
             vol.Required(CONF_ENABLE_AI, default=False): bool,
             vol.Optional(CONF_GEMINI_API_KEY, default=""): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),

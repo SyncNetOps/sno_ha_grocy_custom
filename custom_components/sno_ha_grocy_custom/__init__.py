@@ -1,4 +1,4 @@
-"""Initialisierung der SNO-HA_Grocy-custom Integration V2.0.0 (Cookidoo Bridge Base)."""
+"""Initialisierung der SNO-HA_Grocy-custom Integration V2.0.6 (Bulletproof Migration)."""
 from datetime import timedelta, datetime
 import voluptuous as vol
 import base64
@@ -22,6 +22,34 @@ from .autoinstall import async_install_assets
 from .ai_parser import async_parse_recipe_with_ai
 
 PLATFORMS = ["sensor", "todo"]
+
+# =========================================================
+# MIGRATION HANDLER: LÖST DEN ERROR 500 ENDGÜLTIG!
+# =========================================================
+async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Migriert die Konfiguration sicher auf Version 2."""
+    LOGGER.info("Migration: Aktuelle DB-Version für %s ist %s. Aktualisiere auf 2...", DOMAIN, config_entry.version)
+
+    new_data = {**config_entry.data}
+    new_options = {**config_entry.options}
+
+    # Sicherstellen, dass die neuen Cookidoo-Felder existieren
+    new_options.setdefault(CONF_ENABLE_COOKIDOO, False)
+    new_options.setdefault(CONF_COOKIDOO_EMAIL, "")
+    new_options.setdefault(CONF_COOKIDOO_PASSWORD, "")
+    new_options.setdefault(CONF_COOKIDOO_LOCALE, "de-DE")
+
+    # Update in der Home Assistant Registry erzwingen!
+    hass.config_entries.async_update_entry(
+        config_entry,
+        data=new_data,
+        options=new_options,
+        version=2
+    )
+    
+    LOGGER.info("Migration erfolgreich abgeschlossen!")
+    return True
+# =========================================================
 
 class GrocyPictureView(HomeAssistantView):
     url = "/api/sno_grocy/picture/{filename}"
@@ -66,14 +94,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     session = async_get_clientsession(hass)
     
-    # 1. Grocy Client Setup
     client = GrocyApiClient(entry.data[CONF_URL], entry.data[CONF_API_KEY], session)
     hass.async_create_task(_async_setup_grocy_environment(client))
 
-    # 2. Cookidoo Client Setup (Völlig optional, stört Grocy nicht!)
+    # Cookidoo Setup (Optional)
     cookidoo_client = None
-    
-    # Prüfe ob Cookidoo im Config-Flow (Daten oder Optionen) aktiviert wurde
     enable_cookidoo = entry.options.get(CONF_ENABLE_COOKIDOO, entry.data.get(CONF_ENABLE_COOKIDOO, False))
     
     if enable_cookidoo:
@@ -83,14 +108,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         if email and password:
             try:
-                # Lokaler Import schützt das System davor, abzustürzen, falls die Lib fehlt
                 from cookidoo_api import Cookidoo
                 LOGGER.info("SNO-HA Cookidoo: Starte Login...")
                 cookidoo_client = Cookidoo(email, password, locale)
                 await cookidoo_client.login()
                 LOGGER.info("SNO-HA Cookidoo: Login erfolgreich! Bridge ist im Hintergrund aktiv.")
                 
-                # Der Token läuft nach ein paar Stunden ab. Wir machen alle 60 Minuten einen lautlosen Refresh.
                 async def refresh_cookidoo_token(now):
                     try:
                         await cookidoo_client.refresh()
@@ -105,7 +128,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 LOGGER.error(f"Cookidoo Bridge konnte nicht gestartet werden: {e}")
                 cookidoo_client = None
 
-    # 3. Daten Coordinator
     async def async_update_data():
         try:
             return {
@@ -138,11 +160,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     selected_qu = entry.options.get(CONF_AI_DEFAULT_QU, entry.data.get(CONF_AI_DEFAULT_QU, "1"))
     default_qu_id = int(selected_qu) if str(selected_qu) != "0" else 1
 
-    # Wir übergeben nun BEIDE Clients an das HA-Ökosystem!
     hass.data[DOMAIN][entry.entry_id] = {
         "coordinator": coordinator, 
         "client": client,
-        "cookidoo": cookidoo_client  # Wird "None" sein, wenn Cookidoo nicht aktiviert ist
+        "cookidoo": cookidoo_client
     }
     
     await async_install_assets(hass)
@@ -164,7 +185,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try: return int(val) if val else None
         except: return None
 
-    # --- Standard Grocy Services ---
     async def handle_consume(call):
         prod_id = _get_entity_attr(hass, call.data.get("entity_id"), "product_id") or _extract_id(call.data.get("product_id"))
         if prod_id: await call_and_refresh(client.async_consume_product(prod_id, call.data.get("amount", 1), _extract_id(call.data.get("qu_id"))))
@@ -195,7 +215,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if bat_id: await call_and_refresh(client.async_charge_battery(bat_id))
     hass.services.async_register(DOMAIN, "charge_battery", handle_battery)
 
-    # --- KI REZEPT IMPORT SERVICE (V1.5.2 Base) ---
     if enable_ai:
         async def handle_ai_import(call):
             text_input = call.data.get("text_input")
