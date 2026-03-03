@@ -1,4 +1,4 @@
-"""Automatischer Installer für Frontend-Karten und Blueprints (V1.4.3 Ultimate + Fixes)."""
+"""Automatischer Installer für Frontend-Karten und Blueprints (V1.4.4 Ultimate + UI Fixes)."""
 import os
 import logging
 from homeassistant.core import HomeAssistant
@@ -77,7 +77,7 @@ action:
       text_input: "{{ trigger.to_state.state }}"
 """
 
-# --- JAVASCRIPT KARTEN BUNDLE (V1.4.3 Ultimate + UI Fixes) ---
+# --- JAVASCRIPT KARTEN BUNDLE (V1.4.4 Ultimate) ---
 JS_BUNDLE = r"""
 // ----------------------------------------------------
 // 1. GLOBALE HILFSFUNKTIONEN & DESIGN ENGINE
@@ -89,20 +89,10 @@ function getGrocyDomain(hass) {
 
 function getMasterSensor(hass) {
     if (!hass || !hass.states) return null;
-    
-    let keys = Object.keys(hass.states).filter(k => k.startsWith('sensor.'));
-    
-    // 1. Suche nach den gängigsten Namen für den Master-Sensor
-    let key = keys.find(k => k.includes('inventory_master') || k.includes('grocy_inventory') || k.includes('grocy_stock'));
-    if (key && hass.states[key].attributes && (hass.states[key].attributes.inventory || hass.states[key].attributes.stock)) {
-        return hass.states[key];
-    }
-    
-    // 2. Extrem robuster Fallback: Finde irgendeinen Sensor, der ein Attribut 'inventory' oder 'stock' als Array hat
-    key = keys.find(k => hass.states[k].attributes && (Array.isArray(hass.states[k].attributes.inventory) || Array.isArray(hass.states[k].attributes.stock)));
+    let key = Object.keys(hass.states).find(k => k.startsWith('sensor.') && k.includes('inventory_master'));
     if (key) return hass.states[key];
-    
-    return null;
+    key = Object.keys(hass.states).find(k => k.startsWith('sensor.') && hass.states[k].attributes && hass.states[k].attributes.inventory !== undefined);
+    return key ? hass.states[key] : null;
 }
 
 function fireConfigChange(element, newConfig) {
@@ -136,12 +126,8 @@ class GrocyInventoryExplorerCard extends HTMLElement {
             this._initialized = true; 
             this.render(); 
         } else {
-            const currentMaster = getMasterSensor(hass);
-            const oldMaster = oldHass ? getMasterSensor(oldHass) : null;
-            // Nur neu rendern, wenn sich das Sensor-Objekt wirklich geändert hat
-            if (currentMaster !== oldMaster) { 
-                this.render(); 
-            }
+            const mk = Object.keys(hass.states).find(k => k.includes('inventory_master') || (hass.states[k].attributes && hass.states[k].attributes.inventory));
+            if (mk && oldHass && oldHass.states[mk] !== hass.states[mk]) { this.render(); }
         }
     }
     
@@ -178,15 +164,14 @@ class GrocyInventoryExplorerCard extends HTMLElement {
         if (canClick && this.config.allowed_users && this.config.allowed_users.trim() !== '') {
             const allowedList = this.config.allowed_users.split(',').map(u => u.trim().toLowerCase());
             if (!allowedList.includes(currentUser)) {
-                canClick = false; 
+                canClick = false; // Benutzer nicht berechtigt
             }
         }
         const cursorStyle = canClick ? 'pointer' : 'default';
         
         try {
             const masterSensor = getMasterSensor(this._hass);
-            // Erlaube inventory oder stock als Fallback
-            let inventory = masterSensor?.attributes?.inventory || masterSensor?.attributes?.stock || [];
+            let inventory = masterSensor?.attributes?.inventory || [];
 
             if (this.config.filter_location) inventory = inventory.filter(i => i.location === this.config.filter_location);
             if (this.config.filter_group) inventory = inventory.filter(i => i.group === this.config.filter_group);
@@ -224,7 +209,7 @@ class GrocyInventoryExplorerCard extends HTMLElement {
                 contentHtml = `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:12px;">${gridHtml}</div>`;
             }
 
-            // NATIVE DIALOG POPUP
+            // NATIVE DIALOG POPUP (Entflieht der Karte, Breite korrigiert!)
             let modalHtml = '';
             if (this._selectedItem && canClick) {
                 const item = this._selectedItem;
@@ -250,8 +235,13 @@ class GrocyInventoryExplorerCard extends HTMLElement {
                     .a-btn:active { transform: scale(0.95); }
                     .t-row:hover { background: rgba(128,128,128,0.1); }
                     dialog::backdrop { background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
-                    /* Scrollbereich */
-                    .scroll-container { max-height: ${scrollHeight}px; overflow-y: auto; padding-right: 4px; }
+                    /* Scrollbereich hinzufügen */
+                    .scroll-container {
+                        max-height: ${scrollHeight}px;
+                        overflow-y: auto;
+                        padding-right: 4px; /* Platz für den Scrollbalken */
+                    }
+                    /* Styling für den Scrollbalken (Webkit) */
                     .scroll-container::-webkit-scrollbar { width: 6px; }
                     .scroll-container::-webkit-scrollbar-track { background: transparent; }
                     .scroll-container::-webkit-scrollbar-thumb { background-color: var(--divider-color, rgba(150, 150, 150, 0.3)); border-radius: 10px; }
@@ -268,6 +258,7 @@ class GrocyInventoryExplorerCard extends HTMLElement {
                 </ha-card>
             `;
 
+            // Clicks nur binden, wenn erlaubt
             if (canClick) {
                 this.shadowRoot.querySelectorAll('.click-item').forEach(el => {
                     el.addEventListener('click', () => this.openModal(inventory[el.getAttribute('data-index')]));
@@ -276,9 +267,17 @@ class GrocyInventoryExplorerCard extends HTMLElement {
 
             if (this._selectedItem && canClick) {
                 const dialog = this.shadowRoot.getElementById('modal-dialog');
-                if (dialog && typeof dialog.showModal === 'function') dialog.showModal(); 
+                if (dialog && typeof dialog.showModal === 'function') {
+                    dialog.showModal(); // Öffnet das native Popup!
+                }
+                
                 this.shadowRoot.getElementById('modal-close').addEventListener('click', () => this.closeModal());
-                dialog.addEventListener('click', (e) => { if (e.target === dialog) this.closeModal(); });
+                
+                // Schließen bei Klick auf den Hintergrund
+                dialog.addEventListener('click', (e) => {
+                    if (e.target === dialog) this.closeModal(); 
+                });
+
                 this.shadowRoot.querySelectorAll('.a-btn').forEach(btn => {
                     btn.addEventListener('click', () => this.handleAction(btn.getAttribute('data-action'), 1));
                 });
@@ -305,9 +304,8 @@ class GrocyInventoryExplorerEditor extends HTMLElement {
             this._initialized = true; 
             this.render(); 
         } else {
-            const currentMaster = getMasterSensor(hass);
-            const oldMaster = oldHass ? getMasterSensor(oldHass) : null;
-            if (currentMaster !== oldMaster) { this.updateDropdowns(); }
+            const mk = Object.keys(hass.states).find(k => k.includes('inventory_master') || (hass.states[k].attributes && hass.states[k].attributes.inventory));
+            if (mk && oldHass && oldHass.states[mk] !== hass.states[mk]) { this.updateDropdowns(); }
         }
     }
 
@@ -467,9 +465,8 @@ class GrocyMultiActionEditor extends HTMLElement {
             this._initialized = true; 
             this.render(); 
         } else {
-            const currentMaster = getMasterSensor(hass);
-            const oldMaster = oldHass ? getMasterSensor(oldHass) : null;
-            if (currentMaster !== oldMaster) { this.updateDatalists(); }
+            const mk = Object.keys(hass.states).find(k => k.includes('inventory_master') || (hass.states[k].attributes && hass.states[k].attributes.inventory));
+            if (mk && oldHass && oldHass.states[mk] !== hass.states[mk]) { this.updateDatalists(); }
         }
     }
 
@@ -929,6 +926,26 @@ customElements.define('grocy-shopping-editor', GrocyShoppingEditor);
 // ==========================================
 // 7. GROCY SMART RECIPE HUB (AI IMPORT)
 // ==========================================
+
+// --- NEU: Editor Klasse hinzugefügt, um Home Assistant abzusichern ---
+class GrocySmartRecipeHubEditor extends HTMLElement {
+    setConfig(config) {
+        this._config = config ? JSON.parse(JSON.stringify(config)) : {};
+        if (!this.innerHTML || this.innerHTML.trim() === '') { this.render(); }
+    }
+    render() {
+        this.innerHTML = `
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <div style="background:rgba(var(--rgb-primary-color), 0.1); padding:16px; border-radius:8px; border:1px solid var(--divider-color);">
+                    <h3 style="margin-top:0; color:var(--primary-text-color);">🤖 KI Rezept-Import</h3>
+                    <p style="margin-bottom:0; color:var(--secondary-text-color); font-size: 14px;">Diese Karte benötigt keine weiteren Einstellungen und ist sofort einsatzbereit. Du kannst die Konfiguration hier einfach speichern!</p>
+                </div>
+            </div>
+        `;
+    }
+}
+customElements.define('grocy-smart-recipe-hub-editor', GrocySmartRecipeHubEditor);
+
 class GrocySmartRecipeHub extends HTMLElement {
     setConfig(config) {
         this.config = config || {};
@@ -938,6 +955,11 @@ class GrocySmartRecipeHub extends HTMLElement {
         return { type: "custom:grocy-smart-recipe-hub" };
     }
 
+    // --- WICHTIG: Verbindet die Karte mit dem Editor ---
+    static getConfigElement() {
+        return document.createElement("grocy-smart-recipe-hub-editor");
+    }
+
     set hass(hass) {
         this._hass = hass;
         if (!this.content) {
@@ -945,7 +967,7 @@ class GrocySmartRecipeHub extends HTMLElement {
                 <ha-card header="🤖 Smart Recipe Hub">
                     <div class="card-content">
                         <p style="color: var(--secondary-text-color); margin-top: 0;">Füge hier dein Rezept oder einen Wochenplan ein. Die KI parst die Zutaten, gleicht sie mit deinem Bestand ab und füllt den Essensplan.</p>
-                        <textarea id="recipe-input" rows="8" style="width: 100%; border-radius: 8px; padding: 10px; border: 1px solid var(--divider-color, #ccc); background-color: var(--card-background-color); color: var(--primary-text-color); font-family: inherit; margin-bottom: 15px; resize: vertical; box-sizing: border-box;" placeholder="Beispiel:\\nAm Montag gibt es Chili con Carne.\\nZutaten:\\n- 500g Hackfleisch\\n- 1 Dose Tomaten\\n- 1 Prise Salz..."></textarea>
+                        <textarea id="recipe-input" rows="8" style="width: 100%; border-radius: 8px; padding: 10px; border: 1px solid var(--divider-color, #ccc); background-color: var(--card-background-color); color: var(--primary-text-color); font-family: inherit; margin-bottom: 15px; resize: vertical; box-sizing: border-box;" placeholder="Beispiel:\nAm Montag gibt es Chili con Carne.\nZutaten:\n- 500g Hackfleisch\n- 1 Dose Tomaten\n- 1 Prise Salz..."></textarea>
                         <div id="status-area" style="margin-bottom: 15px; font-size: 14px;"></div>
                         <mwc-button raised id="import-btn" style="width: 100%; --mdc-theme-primary: var(--primary-color);">
                             <ha-icon icon="mdi:auto-fix" style="margin-right: 8px;"></ha-icon>
@@ -999,7 +1021,7 @@ window.customCards.push({ type: "grocy-meal-plan-card", name: "Grocy Meal Plan",
 window.customCards.push({ type: "grocy-shopping-card", name: "Grocy Supermarkt Begleiter", description: "Einkaufsliste sortiert", preview: true });
 window.customCards.push({ type: "grocy-smart-recipe-hub", name: "Grocy Smart Recipe Hub", description: "KI Rezept-Import & Wochenplaner", preview: true });
 
-console.info("SNO-HA_Grocy-custom: Karten V1.4.3 Ultimate geladen.");
+console.info("SNO-HA_Grocy-custom: Karten V1.4.4 Ultimate geladen.");
 """
 
 def _install_sync(hass_config_path):
