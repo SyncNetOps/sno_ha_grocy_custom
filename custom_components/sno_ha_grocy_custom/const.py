@@ -25,6 +25,8 @@ CONF_AI_DEFAULT_QU = "ai_default_qu"
 
 # --- NEU V1.3.0: Standard-Maßeinheiten für Auto-Setup ---
 # Diese Einheiten werden beim Start geprüft und ggf. in Grocy angelegt.
+# Hinweis: Unmessbare Einheiten (Prise, Messerspitze, Schuss) fehlen hier absichtlich, 
+# da die KI diese aussortiert und nur als Text im Rezept hinterlegt!
 DEFAULT_QUANTITY_UNITS = [
     # Basis-Lager-Einheiten
     {"name": "Gramm", "name_plural": "Gramm", "description": "g"},
