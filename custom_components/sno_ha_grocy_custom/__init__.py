@@ -1,5 +1,5 @@
-"""Initialisierung der SNO-HA_Grocy-custom Integration V1.3.0 Ultimate."""
-from datetime import timedelta
+"""Initialisierung der SNO-HA_Grocy-custom Integration V1.4.1 (Stability Fixes)."""
+from datetime import timedelta, datetime
 import voluptuous as vol
 import base64
 
@@ -46,41 +46,26 @@ async def _async_setup_grocy_environment(client: GrocyApiClient):
     existing_units = await client.async_get_quantity_units()
     unit_map = {u.get("name").lower(): u.get("id") for u in existing_units if isinstance(u, dict)}
     
-    # 1. Fehlende Einheiten anlegen
     for unit in DEFAULT_QUANTITY_UNITS:
         u_name_low = unit["name"].lower()
         if u_name_low not in unit_map:
             new_id = await client.async_create_quantity_unit(unit["name"], unit["name_plural"], unit["description"])
-            if new_id:
-                unit_map[u_name_low] = new_id
-                LOGGER.info(f"Maßeinheit angelegt: {unit['name']}")
+            if new_id: unit_map[u_name_low] = new_id
 
-    # 2. Globale Umrechnungen prüfen und anlegen
     existing_conversions = await client.async_get_quantity_unit_conversions()
-    
     for base_name, conv_name, factor in UNIT_CONVERSIONS:
         base_id = unit_map.get(base_name.lower())
         conv_id = unit_map.get(conv_name.lower())
-        
         if base_id and conv_id:
-            # Prüfen ob diese Umrechnung (von -> zu) schon existiert
-            exists = False
-            for ec in existing_conversions:
-                if int(ec.get("from_qu_id", 0)) == int(conv_id) and int(ec.get("to_qu_id", 0)) == int(base_id):
-                    exists = True
-                    break
-            
+            exists = any(int(ec.get("from_qu_id", 0)) == int(conv_id) and int(ec.get("to_qu_id", 0)) == int(base_id) for ec in existing_conversions)
             if not exists:
                 await client.async_create_quantity_unit_conversion(conv_id, base_id, factor)
-                LOGGER.info(f"Umrechnung angelegt: 1 {conv_name} = {factor} {base_name}")
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     session = async_get_clientsession(hass)
     client = GrocyApiClient(entry.data[CONF_URL], entry.data[CONF_API_KEY], session)
     
-    # Führe Auto-Setup der Einheiten im Hintergrund aus
     hass.async_create_task(_async_setup_grocy_environment(client))
 
     async def async_update_data():
@@ -162,79 +147,129 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if bat_id: await call_and_refresh(client.async_charge_battery(bat_id))
     hass.services.async_register(DOMAIN, "charge_battery", handle_battery)
 
-    # --- KI REZEPT IMPORT SERVICE (V1.3.0) ---
+    # --- KI REZEPT IMPORT SERVICE (V1.4.1) ---
     if enable_ai:
         async def handle_ai_import(call):
             text_input = call.data.get("text_input")
             if not text_input or not gemini_api_key: return
 
-            LOGGER.info("Starte KI-Rezept-Analyse. Bitte warten...")
+            LOGGER.info("Starte KI-Wochenplan-Analyse...")
             products = await client.async_get_products()
             units = await client.async_get_quantity_units()
             
+            # --- START: Aggregierter Vorrats-Check Vorbereitung ---
+            stock_list = await client.async_get_stock()
+            virtual_stock = {}
+            if isinstance(stock_list, list):
+                for item in stock_list:
+                    if isinstance(item, dict):
+                        try:
+                            v_amt = float(item.get("amount_aggregated", 0) or 0)
+                        except (ValueError, TypeError):
+                            v_amt = 0.0
+                        virtual_stock[str(item.get("product_id"))] = v_amt
+            # --- ENDE ---
+
             recipes = await async_parse_recipe_with_ai(gemini_api_key, text_input, products, units, session)
-            
-            if not recipes:
-                LOGGER.warning("KI konnte keine Rezepte extrahieren.")
+            if not isinstance(recipes, list):
+                LOGGER.warning("KI Fehler: Ungültiges Rezept-Format empfangen.")
                 return
             
             locs = await client._async_get("/api/objects/locations")
             default_location_id = int(locs[0].get("id", 1)) if locs else 1
 
             for recipe in recipes:
-                recipe_name = recipe.get("name", "KI Importiertes Rezept")
-                base_servings = recipe.get("base_servings", 1) 
+                if not isinstance(recipe, dict): continue
                 
-                raw_desc = recipe.get("description", "")
+                recipe_name = recipe.get("name") or "KI Importiertes Rezept"
+                try:
+                    base_servings = int(recipe.get("base_servings", 1) or 1)
+                except (ValueError, TypeError):
+                    base_servings = 1
+                
+                raw_desc = recipe.get("description") or ""
                 if not raw_desc.startswith("<"): raw_desc = raw_desc.replace("\n", "<br>")
                 
-                ingredients = recipe.get("ingredients", [])
+                ingredients = recipe.get("ingredients") or []
                 valid_ingredients = []
                 ignored_notes = []
                 
-                for ing in ingredients:
-                    if ing.get("ignore_for_stock", False):
-                        amt = ing.get("amount", "")
-                        qu_name = ing.get("qu_name", "")
-                        name = ing.get("raw_ingredient_name", "Zutat")
-                        ignored_notes.append(f"• {amt} {qu_name} {name}".replace("  ", " ").strip())
-                    else:
-                        valid_ingredients.append(ing)
+                if isinstance(ingredients, list):
+                    for ing in ingredients:
+                        if not isinstance(ing, dict): continue
+                        if ing.get("ignore_for_stock", False):
+                            amt = ing.get("amount", "")
+                            qu_name = ing.get("qu_name", "")
+                            name = ing.get("raw_ingredient_name", "Zutat")
+                            ignored_notes.append(f"• {amt} {qu_name} {name}".replace("  ", " ").strip())
+                        else:
+                            valid_ingredients.append(ing)
                         
                 if ignored_notes:
-                    raw_desc += "<br><br><b>💡 Ungetrackte Kleinigkeiten (Gewürze & Co.):</b><br>" + "<br>".join(ignored_notes)
+                    raw_desc += "<br><br><b>💡 Ungetrackte Zutaten:</b><br>" + "<br>".join(ignored_notes)
                 
                 recipe_desc = f"<p>{raw_desc}</p>" if not raw_desc.startswith("<") else raw_desc
 
                 recipe_id = await client.async_add_recipe(recipe_name, recipe_desc, base_servings)
-                if not recipe_id: continue
+                if not recipe_id: 
+                    LOGGER.error(f"Rezept Erstellung fehlgeschlagen für {recipe_name}")
+                    continue
                 
-                LOGGER.info(f"Rezept '{recipe_name}' angelegt. Verknüpfe {len(valid_ingredients)} trackbare Zutaten...")
+                LOGGER.info(f"Rezept '{recipe_name}' angelegt. Verknüpfe Zutaten...")
+                
+                # --- START: Essensplan (Meal Plan) Eintragung ---
+                meal_plan_day = recipe.get("meal_plan_day")
+                if meal_plan_day:
+                    try:
+                        datetime.strptime(meal_plan_day, "%Y-%m-%d")
+                        mp_success = await client.async_add_meal_plan(meal_plan_day, recipe_id)
+                        if mp_success: LOGGER.info(f"-> {recipe_name} in den Essensplan am {meal_plan_day} eingetragen!")
+                    except ValueError:
+                        pass
+                # --- ENDE ---
                 
                 for ing in valid_ingredients:
-                    prod_id = ing.get("product_id")
-                    amount = ing.get("amount", 1)
-                    raw_name = ing.get("raw_ingredient_name", "Unbekannt")
-                    
-                    # KI hat im besten Fall die exakte qu_id aus unserem Wörterbuch zurückgegeben
-                    qu_id = ing.get("qu_id", default_qu_id)
-                    
-                    # Fall 1: Auto-Create
-                    if str(prod_id) == "-1" and auto_create:
-                        new_id = await client.async_create_product(raw_name, default_location_id, qu_id, product_group_id)
-                        if new_id:
-                            prod_id = new_id
-                            LOGGER.info(f"Neues Produkt automatisch angelegt: {raw_name}")
-                    
-                    # Fall 2: Zutat anbinden
-                    if prod_id and str(prod_id) != "-1":
-                        success = await client.async_add_recipe_ingredient(recipe_id, prod_id, amount, qu_id)
-                        if not success:
-                            LOGGER.error(f"Fehler: Zutat '{raw_name}' (ID: {prod_id}, QU: {qu_id}) wurde abgelehnt.")
-                    else:
-                        # Fall 3: Einkaufszettel
-                        if sync_shopping:
-                            await client.async_add_shopping_list_item(f"[REZEPT: {recipe_name}] Fehlende Zutat: {amount}x {raw_name}")
+                    try:
+                        prod_id = ing.get("product_id")
+                        
+                        try:
+                            amount = float(ing.get("amount", 1) or 1)
+                        except (ValueError, TypeError):
+                            amount = 1.0
+                            
+                        raw_name = ing.get("raw_ingredient_name", "Unbekannt")
+                        qu_name = ing.get("qu_name", "")
+                        
+                        qu_id_val = ing.get("qu_id")
+                        try:
+                            qu_id = int(qu_id_val) if qu_id_val is not None else default_qu_id
+                        except (ValueError, TypeError):
+                            qu_id = default_qu_id
+                        
+                        if str(prod_id) == "-1" and auto_create:
+                            new_id = await client.async_create_product(raw_name, default_location_id, qu_id, product_group_id)
+                            if new_id:
+                                prod_id = new_id
+                                virtual_stock[str(prod_id)] = 0.0
+
+                        if prod_id and str(prod_id) != "-1":
+                            success = await client.async_add_recipe_ingredient(recipe_id, prod_id, amount, qu_id)
+                            
+                            # --- START: Aggregierter Vorrats-Check ---
+                            if success and sync_shopping:
+                                available = virtual_stock.get(str(prod_id), 0.0)
+                                if available < amount:
+                                    missing = amount - available
+                                    await client.async_add_shopping_list_item(f"[REZEPT: {recipe_name}] {missing} {qu_name} {raw_name}", missing, prod_id)
+                                    virtual_stock[str(prod_id)] = 0.0
+                                else:
+                                    virtual_stock[str(prod_id)] -= amount
+                            # --- ENDE ---
+                        else:
+                            if sync_shopping:
+                                await client.async_add_shopping_list_item(f"[REZEPT: {recipe_name}] Fehlende Zutat: {amount}x {raw_name}")
+                    except Exception as ing_e:
+                        LOGGER.error(f"Fehler bei Zutat '{ing.get('raw_ingredient_name', 'Unbekannt')}' in Rezept '{recipe_name}': {ing_e}")
             
             await coordinator.async_request_refresh()
 
