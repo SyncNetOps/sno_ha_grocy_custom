@@ -1,4 +1,4 @@
-"""Initialisierung der SNO-HA_Grocy-custom Integration V1.4.2 (Bulk-Collision Fix)."""
+"""Initialisierung der SNO-HA_Grocy-custom Integration V1.5.2 (Restored Data Coordinator)."""
 from datetime import timedelta, datetime
 import voluptuous as vol
 import base64
@@ -68,6 +68,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     hass.async_create_task(_async_setup_grocy_environment(client))
 
+    # --- HIER WAR DER FEHLER: Die Sensor-Daten wurden nicht mehr vollständig abgerufen! ---
     async def async_update_data():
         try:
             return {
@@ -79,7 +80,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "recipes": await client.async_get_recipes(),
                 "batteries": await client.async_get_batteries(),
                 "equipment": await client.async_get_equipment(),
-                "products": await client.async_get_products()
+                "products": await client.async_get_products(),
+                "locations": await client.async_get_locations(),
+                "product_groups": await client.async_get_product_groups(),
+                "quantity_units": await client.async_get_quantity_units()
             }
         except Exception as e:
             raise UpdateFailed(f"Fehler bei Grocy: {e}")
@@ -147,7 +151,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if bat_id: await call_and_refresh(client.async_charge_battery(bat_id))
     hass.services.async_register(DOMAIN, "charge_battery", handle_battery)
 
-    # --- KI REZEPT IMPORT SERVICE (V1.4.2) ---
     if enable_ai:
         async def handle_ai_import(call):
             text_input = call.data.get("text_input")
@@ -157,7 +160,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             products = await client.async_get_products()
             units = await client.async_get_quantity_units()
             
-            # --- Aggregierter Vorrats-Check Vorbereitung ---
             stock_list = await client.async_get_stock()
             virtual_stock = {}
             if isinstance(stock_list, list):
@@ -176,9 +178,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             
             locs = await client._async_get("/api/objects/locations")
             default_location_id = int(locs[0].get("id", 1)) if locs else 1
-
-            # --- NEU V1.4.2: Kurzzeit-Gedächtnis für Bulk-Erstellungen ---
-            # Verhindert "UNIQUE constraint failed" bei gleichen neuen Zutaten in mehreren Rezepten
             session_created_products = {}
 
             for recipe in recipes:
@@ -215,25 +214,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
                 recipe_id = await client.async_add_recipe(recipe_name, recipe_desc, base_servings)
                 if not recipe_id: 
-                    LOGGER.error(f"Rezept Erstellung fehlgeschlagen für {recipe_name}")
                     continue
                 
                 LOGGER.info(f"Rezept '{recipe_name}' angelegt. Verknüpfe Zutaten...")
                 
-                # Essensplan Eintragung
                 meal_plan_day = recipe.get("meal_plan_day")
                 if meal_plan_day:
                     try:
                         datetime.strptime(meal_plan_day, "%Y-%m-%d")
-                        mp_success = await client.async_add_meal_plan(meal_plan_day, recipe_id)
-                        if mp_success: LOGGER.info(f"-> {recipe_name} in den Essensplan am {meal_plan_day} eingetragen!")
+                        await client.async_add_meal_plan(meal_plan_day, recipe_id)
                     except ValueError:
                         pass
                 
                 for ing in valid_ingredients:
                     try:
                         prod_id = ing.get("product_id")
-                        
                         try:
                             amount = float(ing.get("amount", 1) or 1)
                         except (ValueError, TypeError):
@@ -241,37 +236,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             
                         raw_name = ing.get("raw_ingredient_name", "Unbekannt")
                         qu_name = ing.get("qu_name", "")
-                        
                         qu_id_val = ing.get("qu_id")
                         try:
                             qu_id = int(qu_id_val) if qu_id_val is not None else default_qu_id
                         except (ValueError, TypeError):
                             qu_id = default_qu_id
                         
-                        # --- START V1.4.2 COLLISION FIX ---
                         if str(prod_id) == "-1":
                             raw_name_lower = raw_name.lower().strip()
-                            
-                            # 1. Haben wir es gerade in dieser Session schon erfunden?
                             if raw_name_lower in session_created_products:
                                 prod_id = session_created_products[raw_name_lower]
                             else:
-                                # 2. Doppelsicherung: Hat die KI es übersehen, aber es ist exakt so schon in Grocy?
                                 existing_prod = next((p for p in products if p.get("name", "").lower().strip() == raw_name_lower), None)
                                 if existing_prod:
                                     prod_id = existing_prod.get("id")
                                 elif auto_create:
-                                    # 3. Okay, wirklich neu. Anlegen!
                                     new_id = await client.async_create_product(raw_name, default_location_id, qu_id, product_group_id)
                                     if new_id:
                                         prod_id = new_id
                                         session_created_products[raw_name_lower] = new_id
                                         virtual_stock[str(prod_id)] = 0.0
-                        # --- ENDE COLLISION FIX ---
 
                         if prod_id and str(prod_id) != "-1":
                             success = await client.async_add_recipe_ingredient(recipe_id, prod_id, amount, qu_id)
-                            
                             if success and sync_shopping:
                                 available = virtual_stock.get(str(prod_id), 0.0)
                                 if available < amount:
@@ -284,7 +271,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             if sync_shopping:
                                 await client.async_add_shopping_list_item(f"[REZEPT: {recipe_name}] Fehlende Zutat: {amount}x {raw_name}")
                     except Exception as ing_e:
-                        LOGGER.error(f"Fehler bei Zutat '{ing.get('raw_ingredient_name', 'Unbekannt')}' in Rezept '{recipe_name}': {ing_e}")
+                        LOGGER.error(f"Fehler bei Zutat '{ing.get('raw_ingredient_name', 'Unbekannt')}': {ing_e}")
             
             await coordinator.async_request_refresh()
 

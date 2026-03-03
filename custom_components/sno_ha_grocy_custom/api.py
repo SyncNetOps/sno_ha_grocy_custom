@@ -1,4 +1,4 @@
-"""API Client für SNO-HA_Grocy-custom V1.3.0."""
+"""API Client für SNO-HA_Grocy-custom V1.5.2 (Restored Endpoints)."""
 import aiohttp
 import asyncio
 from datetime import datetime, timedelta
@@ -76,7 +76,8 @@ class GrocyApiClient:
     async def async_get_equipment(self) -> list: return await self._async_get("/api/objects/equipment")
     async def async_get_products(self) -> list: return await self._async_get("/api/objects/products")
     
-    # Dropdowns & Einheiten
+    # --- WIEDERHERGESTELLTE ENDPUNKTE (Fehlten und verursachten den UI Fehler) ---
+    async def async_get_locations(self) -> list: return await self._async_get("/api/objects/locations")
     async def async_get_product_groups(self) -> list: return await self._async_get("/api/objects/product_groups")
     async def async_get_quantity_units(self) -> list: return await self._async_get("/api/objects/quantity_units")
     async def async_get_quantity_unit_conversions(self) -> list: return await self._async_get("/api/objects/quantity_unit_conversions")
@@ -127,7 +128,6 @@ class GrocyApiClient:
             return False
 
     # --- REZEPT- & KI-ENGINE AKTIONEN ---
-    
     async def async_create_product(self, name: str, location_id: int, qu_id: int, product_group_id: int = None) -> int | None:
         payload = {
             "name": name,
@@ -139,7 +139,6 @@ class GrocyApiClient:
         }
         if product_group_id:
             payload["product_group_id"] = int(product_group_id)
-            
         return await self._async_post_return_id("/api/objects/products", payload)
 
     async def async_add_recipe(self, name: str, description: str = "", base_servings: int = 1) -> int | None:
@@ -160,7 +159,6 @@ class GrocyApiClient:
         }
         if qu_id is not None:
             payload["qu_id"] = int(qu_id)
-        
         result = await self._async_post_return_id("/api/objects/recipes_pos", payload)
         return result is not None
 
@@ -174,20 +172,12 @@ class GrocyApiClient:
         result = await self._async_post_return_id("/api/objects/meal_plan", payload)
         return result is not None
 
-    # --- NEU V1.3.0: Setup Helfer ---
+    # --- Setup Helfer ---
     async def async_create_quantity_unit(self, name: str, name_plural: str, description: str) -> int | None:
-        payload = {
-            "name": name,
-            "name_plural": name_plural,
-            "description": description
-        }
+        payload = {"name": name, "name_plural": name_plural, "description": description}
         return await self._async_post_return_id("/api/objects/quantity_units", payload)
 
     async def async_create_quantity_unit_conversion(self, from_qu_id: int, to_qu_id: int, factor: float) -> bool:
-        payload = {
-            "from_qu_id": int(from_qu_id),
-            "to_qu_id": int(to_qu_id),
-            "factor": float(factor)
-        }
+        payload = {"from_qu_id": int(from_qu_id), "to_qu_id": int(to_qu_id), "factor": float(factor)}
         result = await self._async_post_return_id("/api/objects/quantity_unit_conversions", payload)
         return result is not None
