@@ -950,7 +950,7 @@ class GrocySmartRecipeHub extends HTMLElement {
         this._hass = hass;
         if (!this.content) {
             this.innerHTML = `
-                <ha-card header="🤖 Smart Recipe Hub">
+                <ha-card header="🤖Grocy Smart Rezept Hub">
                     <div class="card-content">
                         <p style="color: var(--secondary-text-color); margin-top: 0;">Füge hier dein Rezept oder einen Wochenplan ein.</p>
                         <textarea id="recipe-input" rows="8" style="width: 100%; border-radius: 8px; padding: 10px; border: 1px solid var(--divider-color, #ccc); background-color: var(--card-background-color); color: var(--primary-text-color); font-family: inherit; margin-bottom: 15px; resize: vertical; box-sizing: border-box;"></textarea>
