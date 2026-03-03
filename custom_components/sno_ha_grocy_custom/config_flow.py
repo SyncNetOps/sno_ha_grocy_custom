@@ -1,4 +1,4 @@
-"""Config Flow & Options Flow für Grocy V4.1."""
+"""Config Flow & Options Flow für Grocy."""
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
@@ -8,13 +8,18 @@ from homeassistant.helpers.selector import (
     SelectSelectorConfig,
     SelectSelectorMode,
     SelectOptionDict,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+    BooleanSelector,
 )
 
 from .api import GrocyApiClient
 from .const import (
     DOMAIN, CONF_URL, CONF_API_KEY, LOGGER,
     CONF_MODE_TASKS, CONF_MODE_CHORES, CONF_MODE_SHOPPING,
-    CONF_ADVANCED_STATS, MODE_NONE, MODE_SENSOR, MODE_TODO, MODE_BOTH
+    CONF_ADVANCED_STATS, MODE_NONE, MODE_SENSOR, MODE_TODO, MODE_BOTH,
+    CONF_ENABLE_AI, CONF_GEMINI_API_KEY, CONF_AI_AUTO_CREATE, CONF_AI_SYNC_SHOPPING, CONF_AI_PRODUCT_GROUP, CONF_AI_DEFAULT_QU
 )
 
 async def validate_input(hass: HomeAssistant, data: dict) -> dict:
@@ -72,10 +77,49 @@ class GrocyOptionsFlowHandler(config_entries.OptionsFlow):
         options = entry.options
         select_ui = get_select_schema()
 
+        # Init Client für dynamische API-Abfragen
+        session = async_get_clientsession(self.hass)
+        client = GrocyApiClient(self._cfg_entry.data[CONF_URL], self._cfg_entry.data[CONF_API_KEY], session)
+        
+        # Dynamische Dropdowns füllen (Produktgruppen)
+        try:
+            product_groups = await client.async_get_product_groups()
+            group_options = [SelectOptionDict(value="0", label="Keine Gruppe zuweisen")]
+            for g in product_groups:
+                group_options.append(SelectOptionDict(value=str(g.get("id")), label=g.get("name")))
+        except Exception:
+            group_options = [SelectOptionDict(value="0", label="Fehler beim Laden")]
+
+        # Dynamische Dropdowns füllen (Einheiten)
+        try:
+            quantity_units = await client.async_get_quantity_units()
+            qu_options = []
+            for qu in quantity_units:
+                qu_options.append(SelectOptionDict(value=str(qu.get("id")), label=qu.get("name")))
+            if not qu_options:
+                qu_options = [SelectOptionDict(value="1", label="1 (Keine Einheiten in Grocy gefunden)")]
+        except Exception:
+            qu_options = [SelectOptionDict(value="1", label="1 (Fehler beim Laden)")]
+
         schema = vol.Schema({
             vol.Required(CONF_MODE_TASKS, default=options.get(CONF_MODE_TASKS, MODE_BOTH)): select_ui,
             vol.Required(CONF_MODE_CHORES, default=options.get(CONF_MODE_CHORES, MODE_BOTH)): select_ui,
             vol.Required(CONF_MODE_SHOPPING, default=options.get(CONF_MODE_SHOPPING, MODE_BOTH)): select_ui,
-            vol.Optional(CONF_ADVANCED_STATS, default=options.get(CONF_ADVANCED_STATS, False)): bool,
+            vol.Required(CONF_ADVANCED_STATS, default=options.get(CONF_ADVANCED_STATS, False)): BooleanSelector(),
+            
+            # KI Assistent Bereich
+            vol.Required(CONF_ENABLE_AI, default=options.get(CONF_ENABLE_AI, False)): BooleanSelector(),
+            vol.Optional(CONF_GEMINI_API_KEY, default=options.get(CONF_GEMINI_API_KEY, "")): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)
+            ),
+            vol.Required(CONF_AI_AUTO_CREATE, default=options.get(CONF_AI_AUTO_CREATE, False)): BooleanSelector(),
+            vol.Optional(CONF_AI_PRODUCT_GROUP, default=options.get(CONF_AI_PRODUCT_GROUP, "0")): SelectSelector(
+                SelectSelectorConfig(options=group_options, mode=SelectSelectorMode.DROPDOWN)
+            ),
+            vol.Optional(CONF_AI_DEFAULT_QU, default=options.get(CONF_AI_DEFAULT_QU, qu_options[0]["value"])): SelectSelector(
+                SelectSelectorConfig(options=qu_options, mode=SelectSelectorMode.DROPDOWN)
+            ),
+            vol.Required(CONF_AI_SYNC_SHOPPING, default=options.get(CONF_AI_SYNC_SHOPPING, False)): BooleanSelector(),
         })
+
         return self.async_show_form(step_id="init", data_schema=schema)

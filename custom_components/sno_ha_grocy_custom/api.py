@@ -1,4 +1,4 @@
-"""API Client für SNO-HA_Grocy-custom V4.3."""
+"""API Client für SNO-HA_Grocy-custom V1.5.2 (Restored Endpoints)."""
 import aiohttp
 import asyncio
 from datetime import datetime, timedelta
@@ -32,95 +32,152 @@ class GrocyApiClient:
                 response = await self._session.get(f"{self._url}{endpoint}", headers=self._headers)
                 if response.status == 200:
                     return await response.json()
-                return {} if response.status == 400 else None
+                return []
         except Exception as e:
-            LOGGER.error("Fehler bei GET %s: %s", endpoint, e)
-            return None
+            LOGGER.error(f"Fehler bei GET {endpoint}: {e}")
+            return []
 
-    # V4.3 NEU: Raw-Downloader für Bilder (ohne JSON Parsing)
-    async def async_get_raw(self, endpoint: str):
+    async def _async_post(self, endpoint: str, payload: dict) -> bool:
         try:
-            async with asyncio.timeout(15):
-                # Bilder brauchen einen speziellen Accept-Header
-                headers = {"GROCY-API-KEY": self._api_key, "Accept": "*/*"}
-                response = await self._session.get(f"{self._url}{endpoint}", headers=headers)
-                if response.status == 200:
-                    return await response.read()
-                return None
-        except Exception as e:
-            LOGGER.error("Fehler bei RAW GET (Bild Download) %s: %s", endpoint, e)
-            return None
-
-    async def _async_post(self, endpoint: str, payload: dict = None) -> bool:
-        payload = payload or {}
-        try:
-            async with asyncio.timeout(15):
-                response = await self._session.post(f"{self._url}{endpoint}", headers=self._headers, json=payload)
-                if response.status in [200, 204]:
-                    return True
-                error_text = await response.text()
-                LOGGER.error("Grocy API Fehler! HTTP %s bei %s. Antwort: %s. Gesendet: %s", response.status, endpoint, error_text, payload)
-                return False
-        except Exception as e:
-            LOGGER.error("POST Exception %s: %s", endpoint, e)
-            return False
-
-    async def _async_delete(self, endpoint: str) -> bool:
-        try:
-            async with asyncio.timeout(15):
-                response = await self._session.delete(f"{self._url}{endpoint}", headers=self._headers)
+            async with asyncio.timeout(30):
+                response = await self._session.post(f"{self._url}{endpoint}", json=payload, headers=self._headers)
                 return response.status in [200, 204]
         except Exception as e:
-            LOGGER.error("DELETE Exception %s: %s", endpoint, e)
+            LOGGER.error(f"Fehler bei POST {endpoint}: {e}")
             return False
 
-    async def async_get_all_data(self) -> dict:
-        data = {}
-        data["stock"] = await self._async_get("/api/stock")
-        data["stock_volatile"] = await self._async_get("/api/stock/volatile")
-        data["products"] = await self._async_get("/api/objects/products")
-        data["product_groups"] = await self._async_get("/api/objects/product_groups")
-        data["locations"] = await self._async_get("/api/objects/locations")
-        data["quantity_units"] = await self._async_get("/api/objects/quantity_units")
-        data["chores"] = await self._async_get("/api/chores")
-        data["chores_objects"] = await self._async_get("/api/objects/chores")
-        data["tasks"] = await self._async_get("/api/tasks")
-        data["batteries"] = await self._async_get("/api/batteries")
-        data["shopping_list"] = await self._async_get("/api/objects/shopping_list")
-        data["equipment"] = await self._async_get("/api/objects/equipment")
-        data["meal_plan"] = await self._async_get("/api/objects/meal_plan")
-        data["recipes"] = await self._async_get("/api/recipes")
-        
-        date_30_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-        data["stock_log"] = await self._async_get(f"/api/objects/stock_log?query[]=row_created_timestamp>={date_30_days_ago}")
-        return data
+    async def _async_post_return_id(self, endpoint: str, payload: dict) -> int | None:
+        try:
+            async with asyncio.timeout(30):
+                response = await self._session.post(f"{self._url}{endpoint}", json=payload, headers=self._headers)
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("created_object_id")
+                else:
+                    resp_text = await response.text()
+                    LOGGER.error(f"POST {endpoint} fehlgeschlagen (HTTP {response.status}): {resp_text}")
+                    return None
+        except Exception as e:
+            LOGGER.error(f"Fehler bei POST_RETURN_ID {endpoint}: {e}")
+            return None
 
+    # --- DATEN ABRUFEN ---
+    async def async_get_stock(self) -> list: return await self._async_get("/api/stock")
+    async def async_get_chores(self) -> list: return await self._async_get("/api/chores")
+    async def async_get_tasks(self) -> list: return await self._async_get("/api/tasks")
+    async def async_get_shopping_list(self) -> list: return await self._async_get("/api/objects/shopping_list")
+    async def async_get_meal_plan(self) -> list:
+        now = datetime.now()
+        start = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        end = (now + timedelta(days=7)).strftime("%Y-%m-%d")
+        return await self._async_get(f"/api/objects/meal_plan?query[]=day>={start}&query[]=day<={end}")
+    async def async_get_recipes(self) -> list: return await self._async_get("/api/recipes")
+    async def async_get_batteries(self) -> list: return await self._async_get("/api/batteries")
+    async def async_get_equipment(self) -> list: return await self._async_get("/api/objects/equipment")
+    async def async_get_products(self) -> list: return await self._async_get("/api/objects/products")
+    
+    # --- WIEDERHERGESTELLTE ENDPUNKTE (Fehlten und verursachten den UI Fehler) ---
+    async def async_get_locations(self) -> list: return await self._async_get("/api/objects/locations")
+    async def async_get_product_groups(self) -> list: return await self._async_get("/api/objects/product_groups")
+    async def async_get_quantity_units(self) -> list: return await self._async_get("/api/objects/quantity_units")
+    async def async_get_quantity_unit_conversions(self) -> list: return await self._async_get("/api/objects/quantity_unit_conversions")
+
+    # --- AKTIONEN AUSFÜHREN ---
     async def async_consume_product(self, product_id: int, amount: float, qu_id: int = None) -> bool:
-        payload = {"amount": amount, "transaction_type": "consume", "spoiled": False}
-        if qu_id is not None: payload["qu_id"] = qu_id
-        return await self._async_post(f"/api/stock/products/{product_id}/consume", payload)
+        payload = {"amount": float(amount), "transaction_type": "consume", "spoiled": False}
+        if qu_id is not None: payload["qu_id"] = int(qu_id)
+        return await self._async_post(f"/api/stock/products/{int(product_id)}/consume", payload)
 
     async def async_add_product(self, product_id: int, amount: float, price: float = None, qu_id: int = None) -> bool:
-        payload = {"amount": amount, "transaction_type": "purchase"}
-        if price is not None: payload["price"] = price
-        if qu_id is not None: payload["qu_id"] = qu_id
-        return await self._async_post(f"/api/stock/products/{product_id}/add", payload)
+        payload = {"amount": float(amount), "transaction_type": "purchase"}
+        if price is not None: payload["price"] = float(price)
+        if qu_id is not None: payload["qu_id"] = int(qu_id)
+        return await self._async_post(f"/api/stock/products/{int(product_id)}/add", payload)
 
     async def async_transfer_product(self, product_id: int, amount: float, location_id_from: int = None, location_id_to: int = None, qu_id: int = None) -> bool:
-        payload = {"amount": amount}
-        if location_id_from is not None: payload["location_id_from"] = location_id_from
-        if location_id_to is not None: payload["location_id_to"] = location_id_to
-        if qu_id is not None: payload["qu_id"] = qu_id
-        return await self._async_post(f"/api/stock/products/{product_id}/transfer", payload)
+        payload = {"amount": float(amount)}
+        if location_id_from is not None: payload["location_id_from"] = int(location_id_from)
+        if location_id_to is not None: payload["location_id_to"] = int(location_id_to)
+        if qu_id is not None: payload["qu_id"] = int(qu_id)
+        return await self._async_post(f"/api/stock/products/{int(product_id)}/transfer", payload)
 
     async def async_consume_recipe(self, recipe_id: int) -> bool:
-        return await self._async_post(f"/api/recipes/{recipe_id}/consume", {})
+        return await self._async_post(f"/api/recipes/{int(recipe_id)}/consume", {})
 
     async def async_execute_chore(self, chore_id: int) -> bool:
-        return await self._async_post(f"/api/chores/{chore_id}/execute", {})
+        return await self._async_post(f"/api/chores/{int(chore_id)}/execute", {})
 
     async def async_complete_task(self, task_id: int) -> bool:
-        return await self._async_post(f"/api/tasks/{task_id}/complete", {"done_time": ""})
+        return await self._async_post(f"/api/tasks/{int(task_id)}/complete", {})
 
     async def async_charge_battery(self, battery_id: int) -> bool:
-        return await self._async_post(f"/api/batteries/{battery_id}/charge", {})
+        return await self._async_post(f"/api/batteries/{int(battery_id)}/charge", {})
+
+    async def async_add_shopping_list_item(self, note: str, amount: float = 1, product_id: int = None) -> bool:
+        payload = {"note": note, "amount": float(amount), "shopping_list_id": 1}
+        if product_id: payload["product_id"] = int(product_id)
+        return await self._async_post("/api/objects/shopping_list", payload)
+
+    async def async_delete_shopping_list_item(self, item_id: int) -> bool:
+        try:
+            async with asyncio.timeout(10):
+                response = await self._session.delete(f"{self._url}/api/objects/shopping_list/{int(item_id)}", headers=self._headers)
+                return response.status in [200, 204]
+        except Exception as e:
+            LOGGER.error(f"Fehler beim Löschen des Items {item_id}: {e}")
+            return False
+
+    # --- REZEPT- & KI-ENGINE AKTIONEN ---
+    async def async_create_product(self, name: str, location_id: int, qu_id: int, product_group_id: int = None) -> int | None:
+        payload = {
+            "name": name,
+            "location_id": int(location_id),
+            "qu_id_purchase": int(qu_id),
+            "qu_id_stock": int(qu_id),
+            "min_stock_amount": 0,
+            "description": "Automatisch importiert via SNO-HA KI-Bridge"
+        }
+        if product_group_id:
+            payload["product_group_id"] = int(product_group_id)
+        return await self._async_post_return_id("/api/objects/products", payload)
+
+    async def async_add_recipe(self, name: str, description: str = "", base_servings: int = 1) -> int | None:
+        payload = {
+            "name": name,
+            "description": description,
+            "base_servings": int(base_servings),
+            "desired_servings": int(base_servings),
+            "type": "normal"
+        }
+        return await self._async_post_return_id("/api/objects/recipes", payload)
+
+    async def async_add_recipe_ingredient(self, recipe_id: int, product_id: int, amount: float, qu_id: int = None) -> bool:
+        payload = {
+            "recipe_id": int(recipe_id),
+            "product_id": int(product_id),
+            "amount": float(amount)
+        }
+        if qu_id is not None:
+            payload["qu_id"] = int(qu_id)
+        result = await self._async_post_return_id("/api/objects/recipes_pos", payload)
+        return result is not None
+
+    async def async_add_meal_plan(self, day: str, recipe_id: int, type: str = "recipe") -> bool:
+        payload = {
+            "day": day,
+            "type": type,
+            "recipe_id": int(recipe_id),
+            "recipe_servings": 1
+        }
+        result = await self._async_post_return_id("/api/objects/meal_plan", payload)
+        return result is not None
+
+    # --- Setup Helfer ---
+    async def async_create_quantity_unit(self, name: str, name_plural: str, description: str) -> int | None:
+        payload = {"name": name, "name_plural": name_plural, "description": description}
+        return await self._async_post_return_id("/api/objects/quantity_units", payload)
+
+    async def async_create_quantity_unit_conversion(self, from_qu_id: int, to_qu_id: int, factor: float) -> bool:
+        payload = {"from_qu_id": int(from_qu_id), "to_qu_id": int(to_qu_id), "factor": float(factor)}
+        result = await self._async_post_return_id("/api/objects/quantity_unit_conversions", payload)
+        return result is not None

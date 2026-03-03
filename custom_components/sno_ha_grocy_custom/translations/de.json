@@ -17,13 +17,19 @@
   "options": {
     "step": {
       "init": {
-        "title": "Grocy Module & Statistiken",
-        "description": "Wähle aus, in welchem Format die Daten abgebildet werden sollen. Aktiviere zudem erweiterte Statistiken, um detaillierte Auswertungen in den Sensor-Attributen zu generieren.\n\n**Info zu Dashboard-Karten:**\nDer Auto-Installer hat ALLE interaktiven Karten für dich gebündelt! Um sie im Dashboard-Editor nutzen zu können, füge unter *Einstellungen -> Dashboards -> Ressourcen* nur diesen einen Pfad als **JavaScript-Modul** hinzu:\n`/local/sno_ha_grocy_custom/sno-grocy-cards.js`",
+        "title": "Grocy Module & KI-Einstellungen",
+        "description": "Wähle aus, in welchem Format die Daten abgebildet werden sollen. Du kannst hier zudem den experimentellen **KI-Koch-Assistenten** (Gemini) aktivieren, um Rezepte intelligent per Text zu importieren.\n\n**Info zu Dashboard-Karten:**\nDer Auto-Installer hat ALLE interaktiven Karten gebündelt! Um sie im Dashboard zu nutzen, füge unter *Einstellungen -> Dashboards -> Ressourcen* diesen Pfad als JavaScript-Modul hinzu:\n`/local/sno_ha_grocy_custom/sno-grocy-cards.js`",
         "data": {
           "mode_tasks": "Aufgaben (Tasks)",
           "mode_chores": "Hausarbeiten (Chores)",
-          "mode_shopping": "Einkaufsliste",
-          "advanced_stats": "Erweiterte Gruppen- & Detail-Statistiken berechnen"
+          "mode_shopping": "Einkaufslisten (Shopping)",
+          "advanced_stats": "Erweiterte Bestands-Statistiken (Lagerwert in €)",
+          "enable_ai": "🤖 KI-Rezept-Assistent aktivieren (Gemini AI)",
+          "gemini_api_key": "🔑 Gemini API-Key (Erforderlich für KI-Import)",
+          "ai_auto_create": "🪄 Unbekannte Zutaten in Grocy automatisch anlegen",
+          "ai_product_group": "🗂️ Standard-Produktgruppe für neue Artikel (Optional)",
+          "ai_default_qu": "⚖️ Standard-Mengeneinheit (Fallback)",
+          "ai_sync_shopping": "🛒 Fehlende Zutaten automatisch auf die Einkaufsliste setzen"
         }
       }
     }

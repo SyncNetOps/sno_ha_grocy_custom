@@ -1,4 +1,4 @@
-"""Automatischer Installer für Frontend-Karten und Blueprints (V4.3)."""
+"""Automatischer Installer für Frontend-Karten und Blueprints (V1.5.2)."""
 import os
 import logging
 from homeassistant.core import HomeAssistant
@@ -55,7 +55,29 @@ action:
     data: { entity_id: !input chore_sensor }
 """
 
-# --- JAVASCRIPT KARTEN BUNDLE (V4.3 Ultimate + Popup & Access Control) ---
+BP_AI_IMPORT = """blueprint:
+  name: SNO-HA Grocy - Auto-Sync AI Import
+  description: "Überwacht einen Text-Sensor oder eine To-Do Liste (z.B. von Cookidoo) und sendet neue Texte automatisch an den Grocy KI-Import."
+  domain: automation
+  input:
+    trigger_entity:
+      name: Auslöser Entität (Sensor / Todo)
+      description: "Entität, die den Rezepttext erhält (z.B. sensor.cookidoo_heute)"
+      selector:
+        entity: {}
+trigger:
+  - platform: state
+    entity_id: !input trigger_entity
+condition:
+  - condition: template
+    value_template: "{{ trigger.to_state.state not in ['unknown', 'unavailable', ''] }}"
+action:
+  - service: sno_ha_grocy_custom.import_recipe_via_ai
+    data:
+      text_input: "{{ trigger.to_state.state }}"
+"""
+
+# --- JAVASCRIPT KARTEN BUNDLE (Original 1:1 V4.3 + KI Recipe Hub Fix) ---
 JS_BUNDLE = r"""
 // ----------------------------------------------------
 // 1. GLOBALE HILFSFUNKTIONEN & DESIGN ENGINE
@@ -187,7 +209,7 @@ class GrocyInventoryExplorerCard extends HTMLElement {
                 contentHtml = `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:12px;">${gridHtml}</div>`;
             }
 
-            // NATIVE DIALOG POPUP (Entflieht der Karte, Breite korrigiert!)
+            // NATIVE DIALOG POPUP
             let modalHtml = '';
             if (this._selectedItem && canClick) {
                 const item = this._selectedItem;
@@ -900,6 +922,73 @@ class GrocyShoppingEditor extends HTMLElement {
 }
 customElements.define('grocy-shopping-editor', GrocyShoppingEditor);
 
+// ==========================================
+// 7. GROCY SMART RECIPE HUB (AI IMPORT)
+// ==========================================
+class GrocySmartRecipeHubEditor extends HTMLElement {
+    setConfig(config) {
+        this._config = config || {};
+        if (!this.innerHTML || this.innerHTML.trim() === '') { this.render(); }
+    }
+    render() {
+        this.innerHTML = `
+            <div style="padding:16px; background:rgba(var(--rgb-primary-color), 0.1); border-radius:8px; border:1px solid var(--divider-color);">
+                <h3 style="margin-top:0; color:var(--primary-text-color);">🤖 KI Rezept-Import</h3>
+                <p style="margin-bottom:0; color:var(--secondary-text-color); font-size:14px;">Diese Karte ist sofort einsatzbereit und erfordert keine weiteren Einstellungen.</p>
+            </div>
+        `;
+    }
+}
+customElements.define('grocy-smart-recipe-hub-editor', GrocySmartRecipeHubEditor);
+
+class GrocySmartRecipeHub extends HTMLElement {
+    setConfig(config) { this.config = config || {}; }
+    static getStubConfig() { return { type: "custom:grocy-smart-recipe-hub" }; }
+    static getConfigElement() { return document.createElement("grocy-smart-recipe-hub-editor"); }
+
+    set hass(hass) {
+        this._hass = hass;
+        if (!this.content) {
+            this.innerHTML = `
+                <ha-card header="🤖Grocy Smart Rezept Hub">
+                    <div class="card-content">
+                        <p style="color: var(--secondary-text-color); margin-top: 0;">Füge hier dein Rezept oder einen Wochenplan ein.</p>
+                        <textarea id="recipe-input" rows="8" style="width: 100%; border-radius: 8px; padding: 10px; border: 1px solid var(--divider-color, #ccc); background-color: var(--card-background-color); color: var(--primary-text-color); font-family: inherit; margin-bottom: 15px; resize: vertical; box-sizing: border-box;"></textarea>
+                        <div id="status-area" style="margin-bottom: 15px; font-size: 14px;"></div>
+                        <mwc-button raised id="import-btn" style="width: 100%; --mdc-theme-primary: var(--primary-color);">
+                            <ha-icon icon="mdi:auto-fix" style="margin-right: 8px;"></ha-icon> In Grocy analysieren & anlegen
+                        </mwc-button>
+                    </div>
+                </ha-card>
+            `;
+            this.content = this.querySelector('.card-content');
+            this.btn = this.querySelector('#import-btn');
+            this.input = this.querySelector('#recipe-input');
+            this.status = this.querySelector('#status-area');
+            this.btn.addEventListener('click', () => this.importRecipe());
+        }
+    }
+    
+    async importRecipe() {
+        const text = this.input.value.trim();
+        if (!text) {
+            this.status.innerHTML = "<span style='color: var(--error-color, #db4437); font-weight: bold;'>⚠️ Bitte Text eingeben!</span>";
+            return;
+        }
+        this.btn.disabled = true; this.input.disabled = true;
+        this.status.innerHTML = `<span style="color: var(--primary-color); font-weight: bold;">⏳ KI analysiert...</span>`;
+        try {
+            await this._hass.callService('sno_ha_grocy_custom', 'import_recipe_via_ai', { text_input: text });
+            this.status.innerHTML = "<span style='color: var(--success-color, #0f9d58); font-weight: bold;'>✅ Import erfolgreich!</span>";
+            this.input.value = "";
+        } catch (err) {
+            this.status.innerHTML = `<span style='color: var(--error-color, #db4437); font-weight: bold;'>❌ Fehler: ${err.message}</span>`;
+        } finally {
+            this.btn.disabled = false; this.input.disabled = false;
+        }
+    }
+}
+customElements.define('grocy-smart-recipe-hub', GrocySmartRecipeHub);
 
 // --- REGISTRIERUNG IN HOME ASSISTANT ---
 window.customCards = window.customCards || [];
@@ -908,8 +997,9 @@ window.customCards.push({ type: "grocy-multi-action-card", name: "Grocy Multi-Ac
 window.customCards.push({ type: "grocy-household-hub-card", name: "Grocy Household Hub", description: "Hausarbeiten & Aufgaben", preview: true });
 window.customCards.push({ type: "grocy-meal-plan-card", name: "Grocy Meal Plan", description: "Heutiger Essensplan", preview: true });
 window.customCards.push({ type: "grocy-shopping-card", name: "Grocy Supermarkt Begleiter", description: "Einkaufsliste sortiert", preview: true });
+window.customCards.push({ type: "grocy-smart-recipe-hub", name: "Grocy Smart Recipe Hub", description: "KI Rezept-Import & Wochenplaner", preview: true });
 
-console.info("SNO-HA_Grocy-custom: Karten V4.3 Ultimate geladen.");
+console.info("SNO-HA_Grocy-custom: Karten V1.5.2 Ultimate geladen.");
 """
 
 def _install_sync(hass_config_path):
@@ -922,9 +1012,10 @@ def _install_sync(hass_config_path):
 
     with open(os.path.join(bp_dir, "nfc_consume.yaml"), "w", encoding="utf-8") as f: f.write(BP_NFC)
     with open(os.path.join(bp_dir, "chore_reminder.yaml"), "w", encoding="utf-8") as f: f.write(BP_CHORE)
+    with open(os.path.join(bp_dir, "auto_ai_import.yaml"), "w", encoding="utf-8") as f: f.write(BP_AI_IMPORT)
     with open(os.path.join(www_dir, "sno-grocy-cards.js"), "w", encoding="utf-8") as f: f.write(JS_BUNDLE)
     
-    LOGGER.info("SNO-HA_Grocy-custom: V4.3 Auto-Installer hat Blueprints und Frontend-Karten erfolgreich generiert!")
+    LOGGER.info("SNO-HA_Grocy-custom: V1.5.2 Auto-Installer hat Blueprints und Frontend-Karten erfolgreich generiert!")
 
 async def async_install_assets(hass: HomeAssistant):
     """Startet den Installer asynchron im Hintergrund."""

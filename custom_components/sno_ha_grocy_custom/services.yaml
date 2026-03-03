@@ -40,7 +40,7 @@ add_product:
       selector: { number: { min: 0.1, max: 1000, step: 0.1 } }
     price:
       name: "Preis in € (Optional)"
-      selector: { number: { min: 0.0, max: 10000, step: 0.01 } }
+      selector: { number: { min: 0.0, max: 500.0, step: 0.01 } }
     qu_id:
       name: "Verpackungsgröße ID (Optional)"
       selector: { text: {} }
@@ -49,7 +49,7 @@ transfer_product:
   name: "Produkt umbuchen"
   fields:
     entity_id:
-      name: "🔍 Produkt Sensor (Tippe den Namen...)"
+      name: "🔍 Produkt Sensor"
       selector:
         entity:
           integration: sno_ha_grocy_custom
@@ -62,6 +62,9 @@ transfer_product:
       required: true
       default: 1
       selector: { number: { min: 0.1, max: 1000, step: 0.1 } }
+    location_id_from:
+      name: "Aus Quell-Lager ID"
+      selector: { text: {} }
     location_id_to:
       name: "In Ziel-Lager ID"
       selector: { text: {} }
@@ -95,10 +98,10 @@ complete_task:
       selector: { text: {} }
 
 charge_battery:
-  name: "Batterie laden/wechseln"
+  name: "Batterie aufladen / wechseln"
   fields:
     entity_id:
-      name: "🔍 Batterie Sensor (Tippe: 'Batterie' ...)"
+      name: "🔍 Batterie Sensor"
       selector:
         entity:
           integration: sno_ha_grocy_custom
@@ -106,3 +109,13 @@ charge_battery:
     battery_id:
       name: "Oder: Batterie ID (Manuell)"
       selector: { text: {} }
+
+import_recipe_via_ai:
+  name: "Rezept via KI importieren"
+  description: "Parst einen Freitext (z.B. von Cookidoo oder Chefkoch) per Gemini KI, legt das Rezept in Grocy an und gleicht die Zutaten intelligent mit dem Lagerbestand ab."
+  fields:
+    text_input:
+      name: "Rezept Text oder Wochenplan"
+      description: "Füge hier den kopierten Text der Zutatenliste ein."
+      required: true
+      selector: { text: { multiline: true } }
