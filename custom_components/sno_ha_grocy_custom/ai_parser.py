@@ -1,6 +1,6 @@
 """
-SNO-HA_Grocy-custom V1.2.0: KI-Parser (Powered by Gemini).
-Berücksichtigt nun Portionen, Einheitenumrechnung und filtert Gewürze (Ignore for Stock).
+SNO-HA_Grocy-custom V1.3.0: KI-Parser (Powered by Gemini).
+Smart Unit Mapping & Ignore-Filter für Gewürze/Kleinigkeiten.
 """
 import json
 import logging
@@ -31,6 +31,7 @@ REGELN:
       {{
         "amount": 500.0,
         "qu_id": 2,
+        "qu_name": "Gramm",
         "product_id": 14,
         "raw_ingredient_name": "Mehl",
         "ignore_for_stock": false
@@ -39,20 +40,19 @@ REGELN:
   }}
 ]
 
-2. PORTIONEN & UMRECHNUNG: 
-Rechne die Rezeptmengen in die logischste Basis-Einheit aus folgendem Grocy-Einheiten-Wörterbuch (Format "ID": "Name") um:
+2. UNMESSBARE KLEINIGKEITEN IGNORIEREN (WICHTIG!):
+Wenn eine Zutat im Text eine physikalisch ungenaue oder unwesentliche Menge hat, die man in einem Warenwirtschaftssystem nicht per ID tracken will (z.B. '1 Prise Salz', 'etwas Pfeffer', 'Schuss Öl', 'nach Geschmack', '1 Lorbeerblatt', 'Salz und Pfeffer'), MUSS `ignore_for_stock` auf true gesetzt werden! In diesem Fall ist die `product_id` irrelevant. Fülle "amount", "qu_name" und "raw_ingredient_name" aber trotzdem aus (z.B. amount: 1, qu_name: "Prise", raw_ingredient_name: "Salz").
+
+3. EINHEITEN ZUWEISEN (Für alle anderen Zutaten): 
+Ordne der Rezeptmenge die logischste Sub-Einheit oder Basis-Einheit aus folgendem Grocy-Wörterbuch (Format "ID": "Name") zu:
 {json.dumps(unit_dict, ensure_ascii=False)}
-Beispiel: Im Rezept steht "1 kg Mehl", in meinem Wörterbuch gibt es "2: Gramm". Dann setze "amount": 1000 und "qu_id": 2.
-Setze "qu_id" zwingend auf eine Zahl aus diesem Wörterbuch!
+Übersetze auch Abkürzungen! ('EL' oder 'tbsp' -> Esslöffel, 'ml' -> Milliliter, 'g' -> Gramm).
+Setze `qu_id` auf die Zahl aus dem Wörterbuch und `qu_name` auf den Namen der Einheit.
 
-3. GEWÜRZE & KLEINIGKEITEN IGNORIEREN:
-Wenn eine Zutat eine ungenaue oder unwesentliche Kleinigkeit ist, die man nicht klassisch im Lager erfasst (z.B. '1 Prise Salz', 'etwas Pfeffer', 'Schuss Öl', '1 Lorbeerblatt', '1 TL Zucker'), dann setze `ignore_for_stock` zwingend auf true!
-
-4. SMART DEDUPLICATION: 
+4. PRODUKT MAPPING: 
 Hier ist mein existierendes Grocy-Produkt-Wörterbuch:
 {json.dumps(product_dict, ensure_ascii=False)}
-Für jede Zutat MUSST du die logisch passendste `product_id` aus dem Wörterbuch finden.
-Gibt es absolut keinen Treffer, setze `product_id` zwingend auf -1.
+Für jede trackbare Zutat MUSST du die passendste `product_id` finden. Gibt es absolut keinen logischen Treffer, setze `product_id` auf -1.
 
 TEXT-INPUT:
 {text_input}
