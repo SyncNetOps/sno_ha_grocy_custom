@@ -1,12 +1,13 @@
 {
   "domain": "sno_ha_grocy_custom",
-  "name": "SNO HA Grocy Custom",
-  "codeowners": ["@SyncNetOps"],
-  "config_flow": true,
+  "name": "SNO-HA Grocy Custom",
+  "version": "2.0.0",
+  "documentation": "https://github.com/miaucl/cookidoo-api",
   "dependencies": [],
-  "documentation": "https://github.com/SyncNetOps/sno_ha_grocy_custom",
-  "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/SyncNetOps/sno_ha_grocy_custom/issues",
-  "requirements": [],
-  "version": "1.5.2"
+  "codeowners": ["@sno"],
+  "requirements": [
+    "aiohttp",
+    "cookidoo-api"
+  ],
+  "iot_class": "cloud_polling"
 }
