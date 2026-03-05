@@ -2,85 +2,36 @@
   "config": {
     "step": {
       "user": {
-        "title": "Grocy Basis (Schritt 1/3)",
-        "description": "Bitte gib deine Grocy Server-URL und den API-Key ein.",
+        "title": "Grocy mit Home Assistant verbinden",
+        "description": "Bitte gib die URL und den API-Key deiner Grocy Instanz ein.",
         "data": {
-          "url": "Grocy Server URL",
-          "api_key": "Grocy API-Key",
-          "mode_tasks": "Aufgaben (Tasks) Modus",
-          "mode_chores": "Hausarbeiten (Chores) Modus",
-          "mode_shopping": "Einkaufslisten Modus",
-          "advanced_stats": "Erweiterte Statistiken (Lagerwert in €) berechnen"
-        }
-      },
-      "ai_setup": {
-        "title": "KI & Rezept Engine (Schritt 2/3)",
-        "description": "Konfiguriere die intelligente Rezept-Analyse.",
-        "data": {
-          "enable_ai": "KI-Import Engine aktivieren",
-          "gemini_api_key": "Google Gemini API-Key",
-          "ai_auto_create": "Unbekannte Zutaten in Grocy anlegen (Auto-Create)",
-          "ai_sync_shopping": "Fehlmengen direkt auf Einkaufsliste setzen",
-          "ai_product_group": "Standard Produktgruppe für neue Artikel",
-          "ai_default_qu": "Standard Mengeneinheit für neue Artikel"
-        }
-      },
-      "cookidoo_setup": {
-        "title": "Thermomix / Cookidoo (Schritt 3/3)",
-        "description": "Verbinde deinen Cookidoo Account für vollautomatische Kalender- und Einkaufslisten-Syncs. **Tipp:** Wenn du keinen Thermomix nutzt, lass den Schalter einfach aus!",
-        "data": {
-          "enable_cookidoo": "Cookidoo Bridge aktivieren",
-          "cookidoo_email": "Cookidoo E-Mail Adresse",
-          "cookidoo_password": "Cookidoo Passwort",
-          "cookidoo_locale": "Cookidoo Region / Land"
+          "url": "Grocy URL (z.B. http://192.168.1.100:8080)",
+          "api_key": "API Key"
         }
       }
     },
     "error": {
-      "cannot_connect": "Verbindung zu Grocy fehlgeschlagen.",
-      "invalid_auth": "Ungültiger API-Key.",
-      "cookidoo_auth_failed": "Cookidoo Login fehlgeschlagen! Bitte E-Mail und Passwort prüfen."
-    },
-    "abort": {
-      "already_configured": "Dieser Grocy Server ist bereits konfiguriert."
+      "cannot_connect": "Verbindung fehlgeschlagen. Bitte URL und API-Key prüfen."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Grocy Basis-Module (Schritt 1/3)",
-        "description": "Welche HA-Integrationen sollen geladen werden?",
+        "title": "Grocy Module & KI-Einstellungen",
+        "description": "Wähle aus, in welchem Format die Daten abgebildet werden sollen. Du kannst hier zudem den experimentellen **KI-Koch-Assistenten** (Gemini) aktivieren, um Rezepte intelligent per Text zu importieren.\n\n**Info zu Dashboard-Karten:**\nDer Auto-Installer hat ALLE interaktiven Karten gebündelt! Um sie im Dashboard zu nutzen, füge unter *Einstellungen -> Dashboards -> Ressourcen* diesen Pfad als JavaScript-Modul hinzu:\n`/local/sno_ha_grocy_custom/sno-grocy-cards.js`",
         "data": {
-          "mode_tasks": "Aufgaben (Tasks) Modus",
-          "mode_chores": "Hausarbeiten (Chores) Modus",
-          "mode_shopping": "Einkaufslisten Modus",
-          "advanced_stats": "Erweiterte Statistiken (Lagerwert in €) berechnen"
-        }
-      },
-      "ai_setup": {
-        "title": "KI & Rezept Engine (Schritt 2/3)",
-        "data": {
-          "enable_ai": "KI-Import Engine aktivieren",
-          "gemini_api_key": "Google Gemini API-Key",
-          "ai_auto_create": "Unbekannte Zutaten in Grocy anlegen (Auto-Create)",
-          "ai_sync_shopping": "Fehlmengen direkt auf Einkaufsliste setzen",
-          "ai_product_group": "Standard Produktgruppe für neue Artikel",
-          "ai_default_qu": "Standard Mengeneinheit für neue Artikel"
-        }
-      },
-      "cookidoo_setup": {
-        "title": "Thermomix / Cookidoo (Schritt 3/3)",
-        "description": "Verbinde deinen Cookidoo Account für automatische Syncs. Lass den Schalter aus, wenn du dieses Feature nicht möchtest.",
-        "data": {
-          "enable_cookidoo": "Cookidoo Bridge aktivieren",
-          "cookidoo_email": "Cookidoo E-Mail Adresse",
-          "cookidoo_password": "Cookidoo Passwort",
-          "cookidoo_locale": "Cookidoo Region / Land"
+          "mode_tasks": "Aufgaben (Tasks)",
+          "mode_chores": "Hausarbeiten (Chores)",
+          "mode_shopping": "Einkaufslisten (Shopping)",
+          "advanced_stats": "Erweiterte Bestands-Statistiken (Lagerwert in €)",
+          "enable_ai": "🤖 KI-Rezept-Assistent aktivieren (Gemini AI)",
+          "gemini_api_key": "🔑 Gemini API-Key (Erforderlich für KI-Import)",
+          "ai_auto_create": "🪄 Unbekannte Zutaten in Grocy automatisch anlegen",
+          "ai_product_group": "🗂️ Standard-Produktgruppe für neue Artikel (Optional)",
+          "ai_default_qu": "⚖️ Standard-Mengeneinheit (Fallback)",
+          "ai_sync_shopping": "🛒 Fehlende Zutaten automatisch auf die Einkaufsliste setzen"
         }
       }
-    },
-    "error": {
-      "cookidoo_auth_failed": "Cookidoo Login fehlgeschlagen! Bitte E-Mail und Passwort prüfen."
     }
   }
 }
