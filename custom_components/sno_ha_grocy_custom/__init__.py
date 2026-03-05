@@ -1,4 +1,4 @@
-"""Initialisierung der SNO-HA_Grocy-custom Integration V1.5.2 (Restored Data Coordinator)."""
+"""Initialisierung der SNO-HA_Grocy-custom Integration V1.6.0."""
 from datetime import timedelta, datetime
 import voluptuous as vol
 import base64
@@ -8,12 +8,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.components.http import HomeAssistantView
+from homeassistant.helpers.event import async_track_time_interval
 from aiohttp import web
+
+from cookidoo_api import Cookidoo
 
 from .api import GrocyApiClient
 from .const import (
     DOMAIN, CONF_URL, CONF_API_KEY, UPDATE_INTERVAL, LOGGER,
     CONF_ENABLE_AI, CONF_GEMINI_API_KEY, CONF_AI_AUTO_CREATE, CONF_AI_SYNC_SHOPPING, CONF_AI_PRODUCT_GROUP, CONF_AI_DEFAULT_QU,
+    CONF_COOKIDOO_ENABLE, CONF_COOKIDOO_EMAIL, CONF_COOKIDOO_PASSWORD, CONF_COOKIDOO_LOCALE,
     DEFAULT_QUANTITY_UNITS, UNIT_CONVERSIONS
 )
 from .autoinstall import async_install_assets
@@ -66,9 +70,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = async_get_clientsession(hass)
     client = GrocyApiClient(entry.data[CONF_URL], entry.data[CONF_API_KEY], session)
     
+    # --- NEU V1.6.0: Cookidoo Bridge Setup & Background Session ---
+    cookidoo_client = None
+    if entry.options.get(CONF_COOKIDOO_ENABLE, False):
+        email = entry.options.get(CONF_COOKIDOO_EMAIL)
+        password = entry.options.get(CONF_COOKIDOO_PASSWORD)
+        locale = entry.options.get(CONF_COOKIDOO_LOCALE, "de-DE")
+
+        if email and password:
+            cookidoo_client = Cookidoo(localization=locale)
+            try:
+                await cookidoo_client.login(email, password)
+                LOGGER.info("Cookidoo Bridge: Erfolgreich authentifiziert!")
+
+                async def refresh_cookidoo_token(now):
+                    try:
+                        await cookidoo_client.refresh()
+                        LOGGER.debug("Cookidoo Token lautlos im Hintergrund aktualisiert.")
+                    except Exception as refresh_err:
+                        LOGGER.warning(f"Cookidoo Token Refresh fehlgeschlagen: {refresh_err}")
+
+                # Refresh alle 2 Stunden, damit Token nicht abläuft
+                unsub_cookidoo = async_track_time_interval(hass, refresh_cookidoo_token, timedelta(hours=2))
+                entry.async_on_unload(unsub_cookidoo)
+                
+            except Exception as e:
+                LOGGER.error(f"Cookidoo Fehler beim Login. Bitte Zugangsdaten prüfen: {e}")
+                cookidoo_client = None
+    
     hass.async_create_task(_async_setup_grocy_environment(client))
 
-    # --- HIER WAR DER FEHLER: Die Sensor-Daten wurden nicht mehr vollständig abgerufen! ---
     async def async_update_data():
         try:
             return {
@@ -101,7 +132,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     selected_qu = entry.options.get(CONF_AI_DEFAULT_QU, "1")
     default_qu_id = int(selected_qu) if str(selected_qu) != "0" else 1
 
-    hass.data[DOMAIN][entry.entry_id] = {"coordinator": coordinator, "client": client}
+    hass.data[DOMAIN][entry.entry_id] = {
+        "coordinator": coordinator, 
+        "client": client,
+        "cookidoo": cookidoo_client
+    }
     await async_install_assets(hass)
     hass.http.register_view(GrocyPictureView(client))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
